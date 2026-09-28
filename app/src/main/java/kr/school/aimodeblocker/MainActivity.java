@@ -34,7 +34,9 @@ public class MainActivity extends Activity {
         accessibilityButton.setOnClickListener(v -> openAccessibilitySettings());
         changePinButton.setOnClickListener(v -> showVerifyThenChangePin());
 
-        if (!PinManager.hasPin(this)) showInitialPinSetup();
+        if (!PinManager.hasPin(this)) {
+            showInitialPinSetup();
+        }
     }
 
     @Override
@@ -67,80 +69,84 @@ public class MainActivity extends Activity {
     }
 
     private void onToggleRequested() {
-        if (BlockPreferences.isEnabled(this)) {
-            showPinPrompt("차단 끄기", "교사용 PIN을 입력하세요.", pin -> {
-                if (PinManager.verify(this, pin)) {
-                    BlockPreferences.setEnabled(this, false);
-                    Toast.makeText(this, "AI 모드 차단을 껐습니다.", Toast.LENGTH_SHORT).show();
-                    refreshUi();
-                } else {
-                    Toast.makeText(this, "PIN이 올바르지 않습니다.", Toast.LENGTH_SHORT).show();
-                }
-            });
-        } else {
-            showPinPrompt("차단 켜기", "교사용 PIN을 입력하세요.", pin -> {
-                if (PinManager.verify(this, pin)) {
-                    BlockPreferences.setEnabled(this, true);
-                    Toast.makeText(this, "AI 모드 차단을 켰습니다.", Toast.LENGTH_SHORT).show();
-                    refreshUi();
-                    if (!AccessibilityUtils.isServiceEnabled(this)) openAccessibilitySettings();
-                } else {
-                    Toast.makeText(this, "PIN이 올바르지 않습니다.", Toast.LENGTH_SHORT).show();
-                }
-            });
-        }
+        String title = BlockPreferences.isEnabled(this) ? "차단 끄기" : "차단 켜기";
+        showPinPrompt(title, "교사용 PIN을 입력하세요.", pin -> {
+            if (!PinManager.verify(this, pin)) {
+                Toast.makeText(this, "PIN이 올바르지 않습니다.", Toast.LENGTH_SHORT).show();
+                return;
+            }
+
+            boolean next = !BlockPreferences.isEnabled(this);
+            BlockPreferences.setEnabled(this, next);
+            Toast.makeText(
+                    this,
+                    next ? "AI 모드 차단을 켰습니다." : "AI 모드 차단을 껐습니다.",
+                    Toast.LENGTH_SHORT
+            ).show();
+            refreshUi();
+
+            if (next && !AccessibilityUtils.isServiceEnabled(this)) {
+                openAccessibilitySettings();
+            }
+        });
     }
 
     private void showInitialPinSetup() {
         final EditText first = createPinInput();
-        new AlertDialog.Builder(this)
+
+        AlertDialog dialog = new AlertDialog.Builder(this)
                 .setTitle("교사용 PIN 만들기")
                 .setMessage("차단 기능 설정에 사용할 숫자 PIN(4~12자리)을 설정하세요.")
                 .setView(first)
                 .setCancelable(false)
                 .setPositiveButton("다음", null)
-                .setOnShowListener(dialog -> {
-                    AlertDialog alert = (AlertDialog) dialog;
-                    alert.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
-                        String pin = first.getText().toString();
-                        if (!PinManager.isValidFormat(pin)) {
-                            first.setError("숫자 4~12자리로 입력하세요.");
-                            return;
-                        }
-                        alert.dismiss();
-                        showPinConfirmation(pin);
-                    });
+                .create();
+
+        dialog.setOnShowListener(ignored ->
+                dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+                    String pin = first.getText().toString();
+                    if (!PinManager.isValidFormat(pin)) {
+                        first.setError("숫자 4~12자리로 입력하세요.");
+                        return;
+                    }
+                    dialog.dismiss();
+                    showPinConfirmation(pin);
                 })
-                .show();
+        );
+        dialog.show();
     }
 
     private void showPinConfirmation(String firstPin) {
         final EditText confirm = createPinInput();
-        new AlertDialog.Builder(this)
+
+        AlertDialog dialog = new AlertDialog.Builder(this)
                 .setTitle("PIN 확인")
                 .setMessage("같은 PIN을 한 번 더 입력하세요.")
                 .setView(confirm)
                 .setCancelable(false)
                 .setPositiveButton("저장", null)
                 .setNegativeButton("뒤로", (d, w) -> showInitialPinSetup())
-                .setOnShowListener(dialog -> {
-                    AlertDialog alert = (AlertDialog) dialog;
-                    alert.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
-                        String secondPin = confirm.getText().toString();
-                        if (!firstPin.equals(secondPin)) {
-                            confirm.setError("PIN이 일치하지 않습니다.");
-                            return;
-                        }
-                        if (!PinManager.savePin(this, firstPin)) {
-                            Toast.makeText(this, "PIN 저장에 실패했습니다.", Toast.LENGTH_LONG).show();
-                            return;
-                        }
-                        alert.dismiss();
-                        Toast.makeText(this, "교사용 PIN을 설정했습니다.", Toast.LENGTH_SHORT).show();
-                        if (!AccessibilityUtils.isServiceEnabled(this)) openAccessibilitySettings();
-                    });
+                .create();
+
+        dialog.setOnShowListener(ignored ->
+                dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+                    String secondPin = confirm.getText().toString();
+                    if (!firstPin.equals(secondPin)) {
+                        confirm.setError("PIN이 일치하지 않습니다.");
+                        return;
+                    }
+                    if (!PinManager.savePin(this, firstPin)) {
+                        Toast.makeText(this, "PIN 저장에 실패했습니다.", Toast.LENGTH_LONG).show();
+                        return;
+                    }
+                    dialog.dismiss();
+                    Toast.makeText(this, "교사용 PIN을 설정했습니다.", Toast.LENGTH_SHORT).show();
+                    if (!AccessibilityUtils.isServiceEnabled(this)) {
+                        openAccessibilitySettings();
+                    }
                 })
-                .show();
+        );
+        dialog.show();
     }
 
     private void showVerifyThenChangePin() {
@@ -149,6 +155,7 @@ public class MainActivity extends Activity {
                 Toast.makeText(this, "PIN이 올바르지 않습니다.", Toast.LENGTH_SHORT).show();
                 return;
             }
+
             final EditText input = createPinInput();
             new AlertDialog.Builder(this)
                     .setTitle("새 PIN")
@@ -162,6 +169,8 @@ public class MainActivity extends Activity {
                         }
                         if (PinManager.savePin(this, pin)) {
                             Toast.makeText(this, "PIN을 변경했습니다.", Toast.LENGTH_SHORT).show();
+                        } else {
+                            Toast.makeText(this, "PIN 변경에 실패했습니다.", Toast.LENGTH_LONG).show();
                         }
                     })
                     .setNegativeButton("취소", null)
