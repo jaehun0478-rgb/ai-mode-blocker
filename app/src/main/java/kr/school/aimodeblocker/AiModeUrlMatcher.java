@@ -1,68 +1,76 @@
 package kr.school.aimodeblocker;
 
-import java.net.URI;
-import java.net.URLDecoder;
-import java.nio.charset.StandardCharsets;
+import android.net.Uri;
+
 import java.util.Locale;
 
 final class AiModeUrlMatcher {
     private AiModeUrlMatcher() {}
 
     static boolean shouldBlock(String rawValue) {
-        if (rawValue == null) return false;
-        String raw = rawValue.trim().toLowerCase(Locale.ROOT);
-        if (raw.isEmpty() || !raw.contains("google.")) return false;
+        Uri uri = parseGoogleUri(rawValue);
+        if (uri == null) return false;
+
+        String path = lower(uri.getPath());
+        if ("/ai".equals(path) || path.startsWith("/aimode")) {
+            return true;
+        }
+
+        String udm = uri.getQueryParameter("udm");
+        return "50".equals(udm);
+    }
+
+    static boolean shouldForceWeb(String rawValue) {
+        Uri uri = parseGoogleUri(rawValue);
+        if (uri == null) return false;
+
+        String path = lower(uri.getPath());
+        if (!"/search".equals(path)) return false;
+
+        String query = uri.getQueryParameter("q");
+        if (query == null || query.trim().isEmpty()) return false;
+
+        // AI Mode is handled separately and any explicit Google search vertical
+        // (images, shopping, etc.) should be left alone.
+        if (uri.getQueryParameter("udm") != null) return false;
+        if (uri.getQueryParameter("tbm") != null) return false;
+
+        return true;
+    }
+
+    static String toWebUrl(String rawValue) {
+        Uri uri = parseGoogleUri(rawValue);
+        if (uri == null) return null;
+        return uri.buildUpon()
+                .appendQueryParameter("udm", "14")
+                .build()
+                .toString();
+    }
+
+    private static Uri parseGoogleUri(String rawValue) {
+        if (rawValue == null) return null;
+        String raw = rawValue.trim();
+        if (raw.isEmpty()) return null;
 
         String candidate = raw.contains("://") ? raw : "https://" + raw;
         try {
-            URI uri = new URI(candidate);
-            String host = uri.getHost();
-            if (!isGoogleHost(host)) return false;
-
-            String path = uri.getPath();
-            if (path != null) {
-                String cleanPath = path.toLowerCase(Locale.ROOT);
-                if (cleanPath.equals("/ai") || cleanPath.startsWith("/aimode")) {
-                    return true;
-                }
-            }
-
-            String query = uri.getRawQuery();
-            if (query != null && queryHasUdm50(query)) {
-                return true;
-            }
+            Uri uri = Uri.parse(candidate);
+            String host = lower(uri.getHost());
+            if (!isGoogleHost(host)) return null;
+            return uri;
         } catch (Exception ignored) {
+            return null;
         }
-
-        return raw.contains("google.") &&
-                (raw.contains("/aimode") ||
-                 raw.matches(".*google\\.[^/]+/ai(?:[?#/].*)?$") ||
-                 raw.contains("udm=50"));
     }
 
     private static boolean isGoogleHost(String host) {
-        if (host == null) return false;
-        String h = host.toLowerCase(Locale.ROOT);
-        return h.startsWith("google.") || h.contains(".google.");
+        if (host == null || host.isEmpty()) return false;
+        return host.startsWith("google.") ||
+                host.startsWith("www.google.") ||
+                host.contains(".google.");
     }
 
-    private static boolean queryHasUdm50(String rawQuery) {
-        for (String pair : rawQuery.split("&")) {
-            int i = pair.indexOf('=');
-            String key = i >= 0 ? pair.substring(0, i) : pair;
-            String value = i >= 0 ? pair.substring(i + 1) : "";
-            key = decode(key);
-            value = decode(value);
-            if ("udm".equalsIgnoreCase(key) && "50".equals(value)) return true;
-        }
-        return false;
-    }
-
-    private static String decode(String s) {
-        try {
-            return URLDecoder.decode(s, StandardCharsets.UTF_8.name());
-        } catch (Exception e) {
-            return s;
-        }
+    private static String lower(String value) {
+        return value == null ? "" : value.toLowerCase(Locale.ROOT);
     }
 }
