@@ -1,0 +1,6 @@
+<resources>
+    <string name="app_name">AI 모드 차단</string>
+    <string name="accessibility_service_name">AI 모드 차단 감지 서비스</string>
+    <string name="accessibility_description">Chrome에서 Google AI 모드 주소만 감지해 이전 페이지로 되돌립니다. 일반 Google 검색은 차단하지 않습니다.</string>
+    <string name="blocked_message">AI 모드는 사용할 수 없습니다. 일반 Google 검색을 이용하세요.</string>
+</resources>
