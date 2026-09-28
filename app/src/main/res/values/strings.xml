@@ -1,6 +1,6 @@
 <resources>
     <string name="app_name">AI 검색 차단</string>
     <string name="accessibility_service_name">AI 검색 차단 감지 서비스</string>
-    <string name="accessibility_description">Chrome에서 Google AI 모드는 차단하고 일반 Google 검색은 AI 개요가 없는 웹 검색으로 자동 전환합니다.</string>
-    <string name="blocked_message">AI 모드는 사용할 수 없습니다. 일반 Google 검색을 이용하세요.</string>
+    <string name="accessibility_description">Chrome에서 Google AI 모드와 주요 생성형 AI 사이트를 차단하고 일반 Google 검색은 AI 개요가 없는 웹 검색으로 자동 전환합니다.</string>
+    <string name="blocked_message">AI 기능 및 생성형 AI 사이트는 사용할 수 없습니다. 일반 웹 검색을 이용하세요.</string>
 </resources>
