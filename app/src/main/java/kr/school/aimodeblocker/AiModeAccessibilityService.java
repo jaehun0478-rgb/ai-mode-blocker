@@ -1,6 +1,9 @@
 package kr.school.aimodeblocker;
 
 import android.accessibilityservice.AccessibilityService;
+import android.accessibilityservice.AccessibilityServiceInfo;
+import android.content.Intent;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.view.accessibility.AccessibilityEvent;
@@ -9,28 +12,46 @@ import android.widget.Toast;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 public class AiModeAccessibilityService extends AccessibilityService {
     private static final String CHROME = "com.android.chrome";
     private static final String GOOGLE_APP = "com.google.android.googlequicksearchbox";
     private static final String URL_BAR_ID = "com.android.chrome:id/url_bar";
 
-    private static final long CHECK_THROTTLE_MS = 120L;
-    private static final long ACTION_DEBOUNCE_MS = 1400L;
+    private static final long CHECK_THROTTLE_MS = 100L;
+    private static final long ACTION_DEBOUNCE_MS = 1200L;
 
     private long lastCheckAt = 0L;
     private long lastActionAt = 0L;
     private String lastActionKey = "";
 
     @Override
+    protected void onServiceConnected() {
+        super.onServiceConnected();
+
+        AccessibilityServiceInfo info = getServiceInfo();
+        if (info == null) info = new AccessibilityServiceInfo();
+
+        info.packageNames = new String[]{CHROME, GOOGLE_APP};
+        info.eventTypes =
+                AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED |
+                AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED |
+                AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED |
+                AccessibilityEvent.TYPE_VIEW_CLICKED |
+                AccessibilityEvent.TYPE_VIEW_SCROLLED;
+        info.feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC;
+        info.flags |= AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            info.flags |= AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS;
+        }
+        info.notificationTimeout = 80;
+        setServiceInfo(info);
+    }
+
+    @Override
     public void onAccessibilityEvent(AccessibilityEvent event) {
         if (event == null || !BlockPreferences.isEnabled(this)) return;
-
-        CharSequence pkgCs = event.getPackageName();
-        if (pkgCs == null) return;
-        String pkg = pkgCs.toString();
-
-        if (!CHROME.equals(pkg) && !GOOGLE_APP.equals(pkg)) return;
 
         long now = System.currentTimeMillis();
         if (now - lastCheckAt < CHECK_THROTTLE_MS) return;
@@ -38,6 +59,14 @@ public class AiModeAccessibilityService extends AccessibilityService {
 
         AccessibilityNodeInfo root = getRootInActiveWindow();
         if (root == null) return;
+
+        String pkg = "";
+        if (event.getPackageName() != null) {
+            pkg = event.getPackageName().toString();
+        }
+        if (pkg.isEmpty() && root.getPackageName() != null) {
+            pkg = root.getPackageName().toString();
+        }
 
         if (CHROME.equals(pkg)) {
             handleChrome(root, now);
@@ -54,10 +83,7 @@ public class AiModeAccessibilityService extends AccessibilityService {
         if (currentUrl.isEmpty()) return;
 
         if (AiModeUrlMatcher.shouldBlock(currentUrl)) {
-            if (isDuplicateAction("block:" + currentUrl, now)) return;
-            rememberAction("block:" + currentUrl, now);
-            performGlobalAction(GLOBAL_ACTION_BACK);
-            Toast.makeText(this, getString(R.string.blocked_message), Toast.LENGTH_SHORT).show();
+            blockWithBack("block:" + currentUrl, now);
             return;
         }
 
@@ -70,9 +96,7 @@ public class AiModeAccessibilityService extends AccessibilityService {
                 return;
             }
 
-            // Fallback for Chrome builds where the omnibox cannot receive
-            // ACTION_SET_TEXT while a page is displayed.
-            AccessibilityNodeInfo webTab = findWebFilter(root);
+            AccessibilityNodeInfo webTab = findExactTextNode(root, "웹", "Web");
             if (webTab != null && clickNodeOrParent(webTab)) {
                 rememberAction("web-tab:" + currentUrl, now);
             }
@@ -80,48 +104,73 @@ public class AiModeAccessibilityService extends AccessibilityService {
     }
 
     private void handleGoogleApp(AccessibilityEvent event, AccessibilityNodeInfo root, long now) {
-        // Google app does not expose a Chrome-style URL bar. Intercept the
-        // AI Mode tab/button directly from the accessibility event.
+        // 1) Intercept the AI Mode button/tab when Google exposes a click event.
         if (event.getEventType() == AccessibilityEvent.TYPE_VIEW_CLICKED) {
-            String clicked = nodeLabel(event.getSource());
-            if (isAiModeLabel(clicked)) {
-                if (!isDuplicateAction("google-ai-mode", now)) {
-                    rememberAction("google-ai-mode", now);
-                    performGlobalAction(GLOBAL_ACTION_BACK);
-                    Toast.makeText(this, getString(R.string.blocked_message), Toast.LENGTH_SHORT).show();
-                }
+            AccessibilityNodeInfo source = event.getSource();
+            String clicked = combinedNodeLabel(source);
+            if (isAiModeLabel(clicked) || ancestorHasAiModeLabel(source)) {
+                blockWithBack("google-ai-click", now);
                 return;
             }
 
             if (event.getText() != null) {
                 for (CharSequence t : event.getText()) {
                     if (isAiModeLabel(t == null ? "" : t.toString())) {
-                        if (!isDuplicateAction("google-ai-mode", now)) {
-                            rememberAction("google-ai-mode", now);
-                            performGlobalAction(GLOBAL_ACTION_BACK);
-                            Toast.makeText(this, getString(R.string.blocked_message), Toast.LENGTH_SHORT).show();
-                        }
+                        blockWithBack("google-ai-click", now);
                         return;
                     }
                 }
             }
         }
 
-        // If an AI Overview is present in normal Google-app search results,
-        // move to the Web filter in the same result screen.
-        if (containsAnyText(root,
-                "AI 개요",
-                "AI Overview",
-                "AI로 생성됨",
-                "Generative AI is experimental")) {
+        // 2) Some Google-app builds don't expose the AI button click reliably.
+        // Detect the loaded AI Mode page itself and immediately leave it.
+        String screenText = collectScreenText(root, 700);
+        if (looksLikeAiModePage(screenText)) {
+            blockWithBack("google-ai-page", now);
+            return;
+        }
 
-            AccessibilityNodeInfo webTab = findWebFilter(root);
-            if (webTab != null && !isDuplicateAction("google-web-filter", now)) {
-                if (clickNodeOrParent(webTab)) {
-                    rememberAction("google-web-filter", now);
+        // 3) Normal Google-app search: if an AI Overview is present, switch to
+        // the Web filter in the same result screen.
+        if (hasAiOverview(screenText)) {
+            if (isDuplicateAction("google-web-filter", now)) return;
+
+            AccessibilityNodeInfo webTab = findExactTextNode(root, "웹", "Web");
+            if (webTab != null && clickNodeOrParent(webTab)) {
+                rememberAction("google-web-filter", now);
+                return;
+            }
+
+            // Fallback: recover the visible search query and reopen the same
+            // Google search as Web-only results in the Google app.
+            String query = findLikelyGoogleQuery(root);
+            if (query != null && !query.isEmpty()) {
+                Uri webUri = new Uri.Builder()
+                        .scheme("https")
+                        .authority("www.google.com")
+                        .path("/search")
+                        .appendQueryParameter("q", query)
+                        .appendQueryParameter("udm", "14")
+                        .build();
+
+                try {
+                    Intent intent = new Intent(Intent.ACTION_VIEW, webUri);
+                    intent.setPackage(GOOGLE_APP);
+                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    startActivity(intent);
+                    rememberAction("google-web-fallback:" + query, now);
+                } catch (Exception ignored) {
                 }
             }
         }
+    }
+
+    private void blockWithBack(String key, long now) {
+        if (isDuplicateAction(key, now)) return;
+        rememberAction(key, now);
+        performGlobalAction(GLOBAL_ACTION_BACK);
+        Toast.makeText(this, getString(R.string.blocked_message), Toast.LENGTH_SHORT).show();
     }
 
     private AccessibilityNodeInfo findChromeUrlBar(AccessibilityNodeInfo root) {
@@ -153,72 +202,169 @@ public class AiModeAccessibilityService extends AccessibilityService {
             if (!textSet) return false;
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                return urlBar.performAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_IME_ENTER.getId());
+                return urlBar.performAction(
+                        AccessibilityNodeInfo.AccessibilityAction.ACTION_IME_ENTER.getId()
+                );
             }
-
-            return false;
         } catch (Exception ignored) {
-            return false;
         }
+        return false;
     }
 
-    private AccessibilityNodeInfo findWebFilter(AccessibilityNodeInfo root) {
-        List<AccessibilityNodeInfo> candidates = new ArrayList<>();
-        addAll(candidates, safeFindByText(root, "웹"));
-        addAll(candidates, safeFindByText(root, "Web"));
-
-        for (AccessibilityNodeInfo node : candidates) {
-            if (node == null || !node.isVisibleToUser()) continue;
-
-            String label = nodeLabel(node);
-            if ("웹".equals(label) || "Web".equalsIgnoreCase(label)) {
-                return node;
+    private AccessibilityNodeInfo findExactTextNode(
+            AccessibilityNodeInfo root,
+            String... labels
+    ) {
+        for (String label : labels) {
+            List<AccessibilityNodeInfo> nodes = safeFindByText(root, label);
+            for (AccessibilityNodeInfo node : nodes) {
+                if (node == null || !node.isVisibleToUser()) continue;
+                String nodeLabel = combinedNodeLabel(node);
+                if (label.equals(nodeLabel)
+                        || label.equalsIgnoreCase(nodeLabel)
+                        || nodeLabel.startsWith(label + ",")) {
+                    return node;
+                }
             }
         }
         return null;
     }
 
-    private boolean containsAnyText(AccessibilityNodeInfo root, String... texts) {
-        for (String text : texts) {
-            List<AccessibilityNodeInfo> nodes = safeFindByText(root, text);
-            if (nodes != null && !nodes.isEmpty()) return true;
+    private String findLikelyGoogleQuery(AccessibilityNodeInfo root) {
+        List<AccessibilityNodeInfo> queue = new ArrayList<>();
+        queue.add(root);
+
+        String fallback = null;
+
+        for (int i = 0; i < queue.size() && i < 900; i++) {
+            AccessibilityNodeInfo node = queue.get(i);
+            if (node == null) continue;
+
+            CharSequence classNameCs = node.getClassName();
+            String className = classNameCs == null ? "" : classNameCs.toString();
+            CharSequence textCs = node.getText();
+
+            if (textCs != null) {
+                String text = textCs.toString().trim();
+                if (!text.isEmpty() && text.length() <= 300) {
+                    if (className.contains("EditText") || node.isEditable()) {
+                        return text;
+                    }
+                    if (fallback == null && className.contains("TextView")) {
+                        fallback = text;
+                    }
+                }
+            }
+
+            for (int c = 0; c < node.getChildCount(); c++) {
+                AccessibilityNodeInfo child = node.getChild(c);
+                if (child != null) queue.add(child);
+            }
+        }
+        return fallback;
+    }
+
+    private String collectScreenText(AccessibilityNodeInfo root, int maxNodes) {
+        StringBuilder sb = new StringBuilder();
+        List<AccessibilityNodeInfo> queue = new ArrayList<>();
+        queue.add(root);
+
+        for (int i = 0; i < queue.size() && i < maxNodes; i++) {
+            AccessibilityNodeInfo node = queue.get(i);
+            if (node == null) continue;
+
+            appendText(sb, node.getText());
+            appendText(sb, node.getContentDescription());
+            appendText(sb, node.getHintText());
+
+            for (int c = 0; c < node.getChildCount(); c++) {
+                AccessibilityNodeInfo child = node.getChild(c);
+                if (child != null) queue.add(child);
+            }
+        }
+        return sb.toString().toLowerCase(Locale.ROOT);
+    }
+
+    private void appendText(StringBuilder sb, CharSequence text) {
+        if (text == null) return;
+        String value = text.toString().trim();
+        if (!value.isEmpty()) {
+            sb.append(' ').append(value);
+        }
+    }
+
+    private boolean looksLikeAiModePage(String screenText) {
+        if (screenText == null || screenText.isEmpty()) return false;
+
+        boolean hasAiMode =
+                screenText.contains("ai 모드") ||
+                screenText.contains("ai mode");
+
+        boolean hasAiModePageSignature =
+                screenText.contains("무엇이든 물어보세요") ||
+                screenText.contains("ask anything") ||
+                screenText.contains("ai 모드 기록") ||
+                screenText.contains("ai mode history");
+
+        return hasAiMode && hasAiModePageSignature;
+    }
+
+    private boolean hasAiOverview(String screenText) {
+        if (screenText == null) return false;
+        return screenText.contains("ai 개요")
+                || screenText.contains("ai overview")
+                || screenText.contains("ai로 생성됨")
+                || screenText.contains("generative ai is experimental");
+    }
+
+    private boolean isAiModeLabel(String label) {
+        if (label == null) return false;
+        String clean = label.trim().toLowerCase(Locale.ROOT);
+        return clean.equals("ai 모드")
+                || clean.equals("ai mode")
+                || clean.startsWith("ai 모드,")
+                || clean.startsWith("ai mode,");
+    }
+
+    private boolean ancestorHasAiModeLabel(AccessibilityNodeInfo node) {
+        AccessibilityNodeInfo current = node;
+        for (int depth = 0; current != null && depth < 5; depth++) {
+            if (isAiModeLabel(combinedNodeLabel(current))) return true;
+            current = current.getParent();
         }
         return false;
     }
 
-    private List<AccessibilityNodeInfo> safeFindByText(AccessibilityNodeInfo root, String text) {
+    private String combinedNodeLabel(AccessibilityNodeInfo node) {
+        if (node == null) return "";
+        StringBuilder sb = new StringBuilder();
+
+        if (node.getText() != null) {
+            sb.append(node.getText().toString().trim());
+        }
+        if (node.getContentDescription() != null) {
+            if (sb.length() > 0) sb.append(' ');
+            sb.append(node.getContentDescription().toString().trim());
+        }
+        return sb.toString().trim();
+    }
+
+    private List<AccessibilityNodeInfo> safeFindByText(
+            AccessibilityNodeInfo root,
+            String text
+    ) {
         try {
-            return root.findAccessibilityNodeInfosByText(text);
+            List<AccessibilityNodeInfo> nodes =
+                    root.findAccessibilityNodeInfosByText(text);
+            return nodes == null ? new ArrayList<>() : nodes;
         } catch (Exception ignored) {
             return new ArrayList<>();
         }
     }
 
-    private String nodeLabel(AccessibilityNodeInfo node) {
-        if (node == null) return "";
-        if (node.getText() != null) return node.getText().toString().trim();
-        if (node.getContentDescription() != null) {
-            return node.getContentDescription().toString().trim();
-        }
-        return "";
-    }
-
-    private boolean isAiModeLabel(String label) {
-        if (label == null) return false;
-        String clean = label.trim();
-        return "AI 모드".equals(clean)
-                || "AI Mode".equalsIgnoreCase(clean)
-                || clean.startsWith("AI 모드,")
-                || clean.toLowerCase().startsWith("ai mode,");
-    }
-
-    private void addAll(List<AccessibilityNodeInfo> target, List<AccessibilityNodeInfo> source) {
-        if (source != null) target.addAll(source);
-    }
-
     private boolean clickNodeOrParent(AccessibilityNodeInfo node) {
         AccessibilityNodeInfo current = node;
-        for (int depth = 0; current != null && depth < 6; depth++) {
+        for (int depth = 0; current != null && depth < 7; depth++) {
             if (current.isClickable()) {
                 return current.performAction(AccessibilityNodeInfo.ACTION_CLICK);
             }
