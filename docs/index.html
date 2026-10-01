@@ -298,10 +298,9 @@ $("addHostBtn").onclick=()=>{
   $("newHost").value="";
 };
 $("randomClassBtn").onclick=()=>{
-  const chars="ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  let s="";
-  crypto.getRandomValues(new Uint8Array(6)).forEach(v=>s+=chars[v%chars.length]);
-  $("classCode").value="C-"+s;
+  const arr=new Uint32Array(1);
+  crypto.getRandomValues(arr);
+  $("classCode").value=String(100000 + (arr[0] % 900000));
 };
 
 const initialClass=new URL(location.href).searchParams.get("class");
