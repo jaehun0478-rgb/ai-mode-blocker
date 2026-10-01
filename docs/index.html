@@ -43,11 +43,11 @@
     <h2 style="margin-top:0">반별 관리</h2>
     <label>고유반번호</label>
     <div class="row">
-      <input id="classCode" type="text" autocomplete="off" placeholder="예: 4A-7K9P">
+      <input id="classCode" type="text" autocomplete="off" placeholder="예: 4123" inputmode="numeric" maxlength="6">
       <button class="secondary fit" id="selectClassBtn">이 반 선택</button>
       <button class="secondary fit" id="randomClassBtn">랜덤 번호</button>
     </div>
-    <p class="small">학생 개인정보나 학교명을 넣지 말고 임의의 코드 사용을 권장합니다. 영문·숫자·-·_ 4~32자리.</p>
+    <p class="small">숫자 4~6자리만 사용합니다. 예: 4123, 24051, 381204</p>
 
     <div class="classbox">
       <div><span class="badge" id="selectedClass">선택된 반 없음</span></div>
@@ -211,7 +211,7 @@ function renderSelectedClass(){
 function selectClass(){
   const code=normalizeClass($("classCode").value);
   if(!validClass(code)){
-    setStatus("고유반번호는 영문·숫자·-·_ 조합 4~32자리여야 합니다.",false);
+    setStatus("고유반번호는 숫자 4~6자리여야 합니다.",false);
     return;
   }
   selectedClass=code;
