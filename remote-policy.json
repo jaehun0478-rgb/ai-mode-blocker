@@ -1,0 +1,48 @@
+{
+  "revision": "2026-10-01-v1",
+  "blockingEnabled": true,
+  "autoDetectEnabled": true,
+  "adminPin": {
+    "salt": "wVUm6S4bq1K29H9ZJz6KLA==",
+    "hash": "qPmb7Fr0XwEotiQZT9ffb3ax6+pUqmzrI+I/GiZMY9Q=",
+    "iterations": 120000
+  },
+  "blockedHosts": [
+    "chatgpt.com",
+    "chat.openai.com",
+    "claude.ai",
+    "gemini.google.com",
+    "aistudio.google.com",
+    "notebooklm.google.com",
+    "copilot.microsoft.com",
+    "perplexity.ai",
+    "poe.com",
+    "grok.com",
+    "deepseek.com",
+    "meta.ai",
+    "you.com",
+    "character.ai",
+    "chat.mistral.ai",
+    "kimi.com",
+    "qwen.ai",
+    "chat.qwen.ai",
+    "phind.com",
+    "blackbox.ai",
+    "pi.ai",
+    "duck.ai",
+    "z.ai",
+    "wrtn.ai",
+    "easemate.ai",
+    "easemate.net",
+    "easymate.ai"
+  ],
+  "allowedHosts": [
+    "google.com",
+    "naver.com",
+    "daum.net",
+    "kakao.com",
+    "wikipedia.org",
+    "namu.wiki",
+    "youtube.com"
+  ]
+}
