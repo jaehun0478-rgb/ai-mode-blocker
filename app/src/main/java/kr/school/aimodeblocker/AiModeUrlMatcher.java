@@ -28,7 +28,8 @@ final class AiModeUrlMatcher {
             "blackbox.ai",
             "pi.ai",
             "duck.ai",
-            "z.ai"
+            "z.ai",
+            "wrtn.ai"
     };
 
     private AiModeUrlMatcher() {}
