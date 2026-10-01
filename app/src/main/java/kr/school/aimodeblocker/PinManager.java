@@ -15,7 +15,8 @@ final class PinManager {
     private static final String PREFS = "pin_prefs";
     private static final String KEY_SALT = "pin_salt";
     private static final String KEY_HASH = "pin_hash";
-    private static final int ITERATIONS = 120_000;
+    private static final String KEY_ITERATIONS = "pin_iterations";
+    private static final int DEFAULT_ITERATIONS = 120_000;
     private static final int KEY_LENGTH_BITS = 256;
 
     private PinManager() {}
@@ -34,11 +35,12 @@ final class PinManager {
         try {
             byte[] salt = new byte[16];
             new SecureRandom().nextBytes(salt);
-            byte[] hash = derive(pin.toCharArray(), salt);
+            byte[] hash = derive(pin.toCharArray(), salt, DEFAULT_ITERATIONS);
             context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
                     .edit()
                     .putString(KEY_SALT, Base64.encodeToString(salt, Base64.NO_WRAP))
                     .putString(KEY_HASH, Base64.encodeToString(hash, Base64.NO_WRAP))
+                    .putInt(KEY_ITERATIONS, DEFAULT_ITERATIONS)
                     .apply();
             Arrays.fill(hash, (byte) 0);
             return true;
@@ -47,17 +49,41 @@ final class PinManager {
         }
     }
 
+    static void applyManagedPin(
+            Context context,
+            String saltBase64,
+            String hashBase64,
+            int iterations
+    ) {
+        if (saltBase64 == null || hashBase64 == null) return;
+        if (saltBase64.isEmpty() || hashBase64.isEmpty()) return;
+        if (iterations < 10_000 || iterations > 1_000_000) return;
+
+        try {
+            Base64.decode(saltBase64, Base64.NO_WRAP);
+            Base64.decode(hashBase64, Base64.NO_WRAP);
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                    .edit()
+                    .putString(KEY_SALT, saltBase64)
+                    .putString(KEY_HASH, hashBase64)
+                    .putInt(KEY_ITERATIONS, iterations)
+                    .apply();
+        } catch (Exception ignored) {
+        }
+    }
+
     static boolean verify(Context context, String pin) {
         if (pin == null) return false;
         SharedPreferences p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
         String saltString = p.getString(KEY_SALT, null);
         String hashString = p.getString(KEY_HASH, null);
+        int iterations = p.getInt(KEY_ITERATIONS, DEFAULT_ITERATIONS);
         if (saltString == null || hashString == null) return false;
 
         try {
             byte[] salt = Base64.decode(saltString, Base64.NO_WRAP);
             byte[] expected = Base64.decode(hashString, Base64.NO_WRAP);
-            byte[] actual = derive(pin.toCharArray(), salt);
+            byte[] actual = derive(pin.toCharArray(), salt, iterations);
             boolean equal = constantTimeEquals(expected, actual);
             Arrays.fill(actual, (byte) 0);
             return equal;
@@ -66,8 +92,8 @@ final class PinManager {
         }
     }
 
-    private static byte[] derive(char[] pin, byte[] salt) throws Exception {
-        KeySpec spec = new PBEKeySpec(pin, salt, ITERATIONS, KEY_LENGTH_BITS);
+    private static byte[] derive(char[] pin, byte[] salt, int iterations) throws Exception {
+        KeySpec spec = new PBEKeySpec(pin, salt, iterations, KEY_LENGTH_BITS);
         try {
             return SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256")
                     .generateSecret(spec)
