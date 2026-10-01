@@ -1,12 +1,7 @@
 {
-  "revision": "2026-10-01-v1",
+  "revision": "2026-10-01-v2",
   "blockingEnabled": true,
   "autoDetectEnabled": true,
-  "adminPin": {
-    "salt": "wVUm6S4bq1K29H9ZJz6KLA==",
-    "hash": "qPmb7Fr0XwEotiQZT9ffb3ax6+pUqmzrI+I/GiZMY9Q=",
-    "iterations": 120000
-  },
   "blockedHosts": [
     "chatgpt.com",
     "chat.openai.com",
