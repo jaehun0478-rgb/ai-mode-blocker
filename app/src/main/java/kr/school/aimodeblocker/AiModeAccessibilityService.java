@@ -30,6 +30,7 @@ public class AiModeAccessibilityService extends AccessibilityService {
     @Override
     protected void onServiceConnected() {
         super.onServiceConnected();
+        RemotePolicyManager.maybeSync(this, true);
 
         AccessibilityServiceInfo info = getServiceInfo();
         if (info == null) info = new AccessibilityServiceInfo();
@@ -52,7 +53,9 @@ public class AiModeAccessibilityService extends AccessibilityService {
 
     @Override
     public void onAccessibilityEvent(AccessibilityEvent event) {
-        if (event == null || !BlockPreferences.isEnabled(this)) return;
+        if (event == null) return;
+        RemotePolicyManager.maybeSync(this, false);
+        if (!BlockPreferences.isEnabled(this) || !RemotePolicyManager.isRemoteBlockingEnabled(this)) return;
 
         long now = System.currentTimeMillis();
         if (now - lastCheckAt < CHECK_THROTTLE_MS) return;
@@ -104,8 +107,14 @@ public class AiModeAccessibilityService extends AccessibilityService {
             }
         }
 
-        if (AiModeUrlMatcher.shouldBlock(currentUrl)) {
+        if (AiModeUrlMatcher.shouldBlock(currentUrl)
+                || RemotePolicyManager.isBlockedUrl(this, currentUrl)) {
             blockWithBack("block:" + currentUrl, now);
+            return;
+        }
+
+        if (AiPageDetector.looksLikeGenerativeAi(this, currentUrl, root)) {
+            blockWithBack("auto-ai:" + currentUrl, now);
             return;
         }
 
