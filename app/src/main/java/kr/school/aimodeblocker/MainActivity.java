@@ -5,6 +5,8 @@ import android.app.AlertDialog;
 import android.content.Intent;
 import android.graphics.Color;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.provider.Settings;
 import android.text.InputType;
 import android.view.View;
@@ -18,6 +20,8 @@ public class MainActivity extends Activity {
     private TextView accessibilityStatusText;
     private TextView classCodeText;
     private Button accessibilityButton;
+    private boolean registrationDialogShowing = false;
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -43,6 +47,7 @@ public class MainActivity extends Activity {
             showClassRegistration(ClassRegistration.consumeResetNotice(this));
         } else {
             RemotePolicyManager.maybeSync(this, true);
+            scheduleRegistrationRecheck();
         }
     }
 
@@ -57,7 +62,8 @@ public class MainActivity extends Activity {
     }
 
     private void showClassRegistration(boolean wasReset) {
-        if (isFinishing()) return;
+        if (isFinishing() || registrationDialogShowing) return;
+        registrationDialogShowing = true;
 
         final EditText input = new EditText(this);
         input.setSingleLine(true);
@@ -93,6 +99,7 @@ public class MainActivity extends Activity {
                     }
 
                     dialog.dismiss();
+                    registrationDialogShowing = false;
                     Toast.makeText(this, "반번호 " + code + " 등록 완료", Toast.LENGTH_SHORT).show();
                     RemotePolicyManager.maybeSync(this, true);
                     refreshUi();
@@ -103,7 +110,23 @@ public class MainActivity extends Activity {
                 })
         );
 
+        dialog.setOnDismissListener(ignored -> registrationDialogShowing = false);
         dialog.show();
+    }
+
+    private void scheduleRegistrationRecheck() {
+        mainHandler.postDelayed(this::checkRegistrationAfterSync, 1500L);
+        mainHandler.postDelayed(this::checkRegistrationAfterSync, 4000L);
+    }
+
+    private void checkRegistrationAfterSync() {
+        if (isFinishing()) return;
+        if (!ClassRegistration.hasClassCode(this)) {
+            refreshUi();
+            showClassRegistration(ClassRegistration.consumeResetNotice(this));
+        } else {
+            refreshUi();
+        }
     }
 
     private void refreshUi() {
