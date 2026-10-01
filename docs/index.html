@@ -3,76 +3,97 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>AI 검색 차단 · 중앙관리</title>
+  <title>AI 검색 차단 · 반별 중앙관리</title>
   <style>
     :root{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#17202a;background:#f4f6f8}
-    *{box-sizing:border-box} body{margin:0} main{max-width:920px;margin:0 auto;padding:28px 18px 60px}
-    h1{font-size:28px;margin:0 0 8px} .sub{color:#607080;margin:0 0 24px}
-    .card{background:#fff;border:1px solid #e4e8ec;border-radius:14px;padding:20px;margin:14px 0;box-shadow:0 2px 8px rgba(0,0,0,.04)}
-    .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.row>*{flex:1}.row .fit{flex:0 0 auto}
-    label{display:block;font-weight:700;margin-bottom:7px} input,textarea,button{font:inherit}
-    input[type=text],input[type=password],textarea{width:100%;padding:11px 12px;border:1px solid #cfd7df;border-radius:9px;background:#fff}
-    textarea{min-height:190px;resize:vertical;line-height:1.45}
+    *{box-sizing:border-box}body{margin:0}main{max-width:960px;margin:0 auto;padding:28px 18px 60px}
+    h1{font-size:28px;margin:0 0 8px}.sub,.small{color:#657585}.small{font-size:13px}
+    .card{background:#fff;border:1px solid #e3e8ed;border-radius:14px;padding:20px;margin:14px 0;box-shadow:0 2px 8px rgba(0,0,0,.04)}
+    .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.row>*{flex:1}.fit{flex:0 0 auto}
+    label{display:block;font-weight:700;margin-bottom:7px}input,textarea,button{font:inherit}
+    input[type=text],input[type=password],textarea{width:100%;padding:11px 12px;border:1px solid #ccd5df;border-radius:9px;background:#fff}
+    textarea{min-height:180px;resize:vertical;line-height:1.45}
     button{border:0;border-radius:9px;padding:11px 16px;font-weight:700;cursor:pointer}
-    .primary{background:#1769e0;color:#fff}.secondary{background:#eaf2ff;color:#1756a9}.danger{background:#fff0f0;color:#a62121}
-    .toggle{display:flex;align-items:center;gap:10px}.toggle input{width:22px;height:22px}
-    .status{padding:11px 13px;border-radius:9px;background:#f1f4f6;color:#465564;margin-top:12px;white-space:pre-wrap}
+    button:disabled{opacity:.5;cursor:not-allowed}
+    .primary{background:#1769e0;color:#fff}.secondary{background:#eaf2ff;color:#1756a9}.danger{background:#b42318;color:#fff}
+    .toggle{display:flex;gap:10px;align-items:center}.toggle input{width:24px;height:24px}
+    .status{padding:11px 13px;border-radius:9px;background:#f0f3f5;margin-top:12px;white-space:pre-wrap}
     .ok{background:#eaf8ef;color:#146c36}.bad{background:#fff0f0;color:#a62121}
-    code{background:#f1f3f5;padding:2px 5px;border-radius:5px}
-    .small{font-size:13px;color:#687785}.pill{display:inline-block;padding:5px 9px;border-radius:99px;background:#eef4ff;color:#315d9b;font-size:13px;font-weight:700}
+    .classbox{background:#eef5ff;border-radius:12px;padding:16px;margin-top:14px}
+    .badge{display:inline-block;background:#dceaff;color:#24508b;border-radius:99px;padding:5px 10px;font-size:13px;font-weight:700}
+    .warn{background:#fff6df;border:1px solid #f2d98a;border-radius:10px;padding:12px;color:#705b16}
   </style>
 </head>
 <body>
 <main>
-  <h1>AI 검색 차단 · 중앙관리</h1>
-  <p class="sub">학생 태블릿은 APK 설치 후 접근성 서비스만 한 번 켜면 됩니다. 이후 정책은 이 페이지에서 중앙 관리합니다.</p>
+  <h1>AI 검색 차단 · 반별 중앙관리</h1>
+  <p class="sub">사이트 차단 목록과 자동 감지 규칙은 모든 반이 공유합니다. AI 차단 ON/OFF와 기기 등록 초기화만 고유반번호별로 적용됩니다.</p>
 
   <section class="card">
+    <label>GitHub Fine-grained Token</label>
     <div class="row">
-      <div>
-        <label>GitHub Fine-grained Token</label>
-        <input id="token" type="password" autocomplete="off" placeholder="Contents: Read and write 권한이 있는 토큰">
-      </div>
+      <input id="token" type="password" autocomplete="off" placeholder="ai-mode-blocker 저장소 · Contents: Read and write">
       <button class="secondary fit" id="loadBtn">정책 불러오기</button>
     </div>
-    <p class="small">토큰은 이 페이지의 메모리에서만 사용하며 저장소로 전송하지 않습니다. 공용 PC에서는 브라우저에 저장하지 마세요.</p>
+    <p class="small">토큰은 브라우저 메모리에서만 사용합니다. 학생 기기로 전송되지 않습니다.</p>
     <div id="status" class="status">정책을 불러오세요.</div>
   </section>
 
   <section class="card">
+    <h2 style="margin-top:0">반별 관리</h2>
+    <label>고유반번호</label>
     <div class="row">
-      <label class="toggle"><input id="blocking" type="checkbox"> AI 차단 전체 ON</label>
-      <label class="toggle"><input id="autoDetect" type="checkbox"> 신규 AI 사이트 자동판별 ON</label>
+      <input id="classCode" type="text" autocomplete="off" placeholder="예: 4A-7K9P">
+      <button class="secondary fit" id="selectClassBtn">이 반 선택</button>
+      <button class="secondary fit" id="randomClassBtn">랜덤 번호</button>
     </div>
+    <p class="small">학생 개인정보나 학교명을 넣지 말고 임의의 코드 사용을 권장합니다. 영문·숫자·-·_ 4~32자리.</p>
+
+    <div class="classbox">
+      <div><span class="badge" id="selectedClass">선택된 반 없음</span></div>
+      <label class="toggle" style="margin-top:16px">
+        <input id="classEnabled" type="checkbox" disabled>
+        이 반 AI 차단 ON
+      </label>
+      <div class="row" style="margin-top:14px">
+        <button class="primary" id="saveClassBtn" disabled>이 반 ON/OFF 저장</button>
+        <button class="danger fit" id="resetClassBtn" disabled>이 반 기기 등록 초기화</button>
+      </div>
+    </div>
+
+    <p class="warn" style="margin-bottom:0">
+      <b>기기 등록 초기화</b>를 누르면 그 반번호로 등록된 기기만 다음 정책 동기화 때 반등록이 해제됩니다.
+      이후 학생이 앱을 열면 새 고유반번호 입력창이 다시 나타납니다. 학년 변경 때 사용하면 됩니다.
+    </p>
   </section>
 
   <section class="card">
-    <label>새 AI 사이트 빠른 추가</label>
+    <h2 style="margin-top:0">전 반 공통 AI 사이트 정책</h2>
+    <label class="toggle">
+      <input id="autoDetect" type="checkbox">
+      신규 AI 사이트 자동판별 ON
+    </label>
+
+    <label style="margin-top:20px">새 AI 사이트 빠른 추가</label>
     <div class="row">
       <input id="newHost" type="text" placeholder="예: example-ai.com">
-      <button class="primary fit" id="addHostBtn">추가</button>
+      <button class="secondary fit" id="addHostBtn">목록에 추가</button>
     </div>
-    <p class="small">https:// 없이 도메인만 입력하면 됩니다. 서브도메인도 함께 차단됩니다.</p>
-  </section>
 
-  <section class="card">
-    <label>차단 도메인</label>
+    <label style="margin-top:20px">차단 도메인</label>
     <textarea id="blockedHosts" spellcheck="false"></textarea>
-    <p class="small">한 줄에 하나씩 입력하세요.</p>
-  </section>
+    <p class="small">한 줄에 하나. 이 목록은 모든 반에 공통으로 적용됩니다.</p>
 
-  <section class="card">
     <label>자동판별 예외 도메인</label>
     <textarea id="allowedHosts" spellcheck="false"></textarea>
-    <p class="small">이 목록은 자동 AI 판별만 건너뜁니다. Google/Naver의 별도 AI 차단 규칙은 그대로 작동합니다.</p>
+    <p class="small">이 목록 역시 모든 반이 공유합니다. Google/Naver 별도 AI 차단 규칙은 계속 적용됩니다.</p>
+
+    <button class="primary" id="saveSharedBtn">공통 사이트 정책 저장</button>
   </section>
 
   <section class="card">
-    <div class="row">
-      <button class="primary" id="saveBtn">전체 학생 기기에 정책 저장</button>
-      <button class="secondary fit" id="reloadBtn">다시 불러오기</button>
-    </div>
-    <p class="small">학생 패드는 Chrome/Google/Naver 사용 중 약 2분 간격으로 새 정책을 확인합니다. 인터넷이 끊겨도 마지막 정책으로 계속 차단합니다.</p>
+    <b>학생 기기 설치 흐름</b>
+    <p style="margin-bottom:0">MDM으로 APK 설치 → 앱 최초 실행 → 고유반번호 입력 → 접근성 서비스 허용. 이후 반 ON/OFF와 사이트 정책은 중앙에서 자동 동기화됩니다.</p>
   </section>
 </main>
 
@@ -83,12 +104,23 @@ const PATH="remote-policy.json";
 const BRANCH="main";
 const RAW="https://raw.githubusercontent.com/"+OWNER+"/"+REPO+"/"+BRANCH+"/"+PATH;
 const API="https://api.github.com/repos/"+OWNER+"/"+REPO+"/contents/"+PATH;
+
 let currentPolicy=null;
+let selectedClass="";
 
 const $=id=>document.getElementById(id);
-function setStatus(msg, ok=null){
-  const el=$("status"); el.textContent=msg;
+
+function setStatus(msg,ok=null){
+  const el=$("status");
+  el.textContent=msg;
   el.className="status"+(ok===true?" ok":ok===false?" bad":"");
+}
+
+function normalizeClass(v){
+  return (v||"").trim().replace(/\s+/g,"").toUpperCase();
+}
+function validClass(v){
+  return /^[A-Z0-9_-]{4,32}$/.test(normalizeClass(v));
 }
 function normalizeHost(v){
   v=(v||"").trim().toLowerCase();
@@ -99,86 +131,184 @@ function normalizeHost(v){
 function parseLines(text){
   return [...new Set(text.split(/\r?\n/).map(normalizeHost).filter(Boolean))].sort();
 }
+function utf8ToBase64(str){
+  const bytes=new TextEncoder().encode(str);
+  let s="";
+  for(const b of bytes)s+=String.fromCharCode(b);
+  return btoa(s);
+}
+function headers(){
+  const token=$("token").value.trim();
+  if(!token) throw new Error("GitHub 토큰을 입력하세요.");
+  return {
+    "Accept":"application/vnd.github+json",
+    "Authorization":"Bearer "+token,
+    "X-GitHub-Api-Version":"2022-11-28"
+  };
+}
+async function putPolicy(policy,message){
+  const h=headers();
+  const meta=await fetch(API+"?ref="+encodeURIComponent(BRANCH),{headers:h});
+  if(!meta.ok) throw new Error("GitHub 파일 조회 실패 HTTP "+meta.status);
+  const info=await meta.json();
+
+  const put=await fetch(API,{
+    method:"PUT",
+    headers:{...h,"Content-Type":"application/json"},
+    body:JSON.stringify({
+      message,
+      content:utf8ToBase64(JSON.stringify(policy,null,2)+"\n"),
+      sha:info.sha,
+      branch:BRANCH
+    })
+  });
+  if(!put.ok){
+    const t=await put.text();
+    throw new Error("GitHub 저장 실패 HTTP "+put.status+" "+t.slice(0,180));
+  }
+}
+
 function fill(policy){
   currentPolicy=policy;
-  $("blocking").checked=policy.blockingEnabled!==false;
+  if(!currentPolicy.classBlocking) currentPolicy.classBlocking={};
+  if(!currentPolicy.classResetEpoch) currentPolicy.classResetEpoch={};
+
   $("autoDetect").checked=policy.autoDetectEnabled!==false;
   $("blockedHosts").value=(policy.blockedHosts||[]).join("\n");
   $("allowedHosts").value=(policy.allowedHosts||[]).join("\n");
+
+  if(selectedClass) renderSelectedClass();
   setStatus("정책 불러옴 · revision: "+(policy.revision||"(없음)"),true);
 }
+
 async function loadPolicy(){
   try{
     setStatus("정책 불러오는 중...");
     const r=await fetch(RAW+"?t="+Date.now(),{cache:"no-store"});
     if(!r.ok) throw new Error("HTTP "+r.status);
     fill(await r.json());
-  }catch(e){setStatus("불러오기 실패: "+e.message,false)}
+  }catch(e){
+    setStatus("불러오기 실패: "+(e.message||e),false);
+  }
 }
-function bytesToBase64(bytes){
-  let s=""; for(const b of bytes)s+=String.fromCharCode(b); return btoa(s);
+
+function renderSelectedClass(){
+  if(!selectedClass || !currentPolicy){
+    $("selectedClass").textContent="선택된 반 없음";
+    $("classEnabled").disabled=true;
+    $("saveClassBtn").disabled=true;
+    $("resetClassBtn").disabled=true;
+    return;
+  }
+  $("selectedClass").textContent="선택 반: "+selectedClass;
+  $("classEnabled").disabled=false;
+  $("saveClassBtn").disabled=false;
+  $("resetClassBtn").disabled=false;
+  const states=currentPolicy.classBlocking||{};
+  $("classEnabled").checked=(states[selectedClass]!==false);
 }
-function utf8ToBase64(str){
-  const bytes=new TextEncoder().encode(str); return bytesToBase64(bytes);
+
+function selectClass(){
+  const code=normalizeClass($("classCode").value);
+  if(!validClass(code)){
+    setStatus("고유반번호는 영문·숫자·-·_ 조합 4~32자리여야 합니다.",false);
+    return;
+  }
+  selectedClass=code;
+  $("classCode").value=code;
+  renderSelectedClass();
+
+  const u=new URL(location.href);
+  u.searchParams.set("class",code);
+  history.replaceState(null,"",u);
+  setStatus(code+" 반을 선택했습니다. 등록되지 않은 새 반은 기본 ON입니다.",true);
 }
-async function makePin(pin){
-  if(!/^\d{4,12}$/.test(pin)) throw new Error("PIN은 숫자 4~12자리여야 합니다.");
-  const salt=crypto.getRandomValues(new Uint8Array(16));
-  const key=await crypto.subtle.importKey("raw",new TextEncoder().encode(pin),"PBKDF2",false,["deriveBits"]);
-  const bits=await crypto.subtle.deriveBits(
-    {name:"PBKDF2",salt,iterations:120000,hash:"SHA-256"},key,256
-  );
-  return {salt:bytesToBase64(salt),hash:bytesToBase64(new Uint8Array(bits)),iterations:120000};
-}
-async function savePolicy(){
-  const token=$("token").value.trim();
-  if(!token){setStatus("GitHub 토큰을 입력하세요.",false);return}
-  if(!currentPolicy){setStatus("먼저 정책을 불러오세요.",false);return}
+
+async function saveClass(){
+  if(!selectedClass || !currentPolicy) return;
   try{
-    setStatus("정책 저장 중...");
-    const policy=structuredClone(currentPolicy);
-    policy.blockingEnabled=$("blocking").checked;
-    policy.autoDetectEnabled=$("autoDetect").checked;
-    policy.blockedHosts=parseLines($("blockedHosts").value);
-    policy.allowedHosts=parseLines($("allowedHosts").value);
-    policy.revision=new Date().toISOString();
-
-    const headers={
-      "Accept":"application/vnd.github+json",
-      "Authorization":"Bearer "+token,
-      "X-GitHub-Api-Version":"2022-11-28"
-    };
-    const meta=await fetch(API+"?ref="+encodeURIComponent(BRANCH),{headers});
-    if(!meta.ok) throw new Error("GitHub 파일 조회 실패 HTTP "+meta.status);
-    const info=await meta.json();
-
-    const put=await fetch(API,{
-      method:"PUT",headers:{...headers,"Content-Type":"application/json"},
-      body:JSON.stringify({
-        message:"Update centrally managed AI blocking policy",
-        content:utf8ToBase64(JSON.stringify(policy,null,2)+"\n"),
-        sha:info.sha,
-        branch:BRANCH
-      })
-    });
-    if(!put.ok){
-      const t=await put.text();
-      throw new Error("GitHub 저장 실패 HTTP "+put.status+" "+t.slice(0,180));
-    }
-    fill(policy);
-    setStatus("저장 완료. 학생 패드들이 새 정책을 자동으로 가져갑니다.\nrevision: "+policy.revision,true);
-  }catch(e){setStatus(e.message||String(e),false)}
+    setStatus(selectedClass+" 반 설정 저장 중...");
+    const p=structuredClone(currentPolicy);
+    p.classBlocking=p.classBlocking||{};
+    p.classBlocking[selectedClass]=$("classEnabled").checked;
+    p.revision=new Date().toISOString();
+    await putPolicy(p,"Update class "+selectedClass+" blocking state");
+    fill(p);
+    setStatus(selectedClass+" 반 ON/OFF 저장 완료. 이 반번호 기기들에만 적용됩니다.",true);
+  }catch(e){
+    setStatus(e.message||String(e),false);
+  }
 }
+
+async function resetClass(){
+  if(!selectedClass || !currentPolicy) return;
+  const ok=confirm(
+    selectedClass+" 반으로 등록된 모든 기기의 반등록을 초기화합니다.\n\n"+
+    "기기들은 정책을 받은 뒤 새 반번호를 다시 입력해야 합니다. 계속할까요?"
+  );
+  if(!ok) return;
+
+  try{
+    setStatus(selectedClass+" 반 기기 초기화 요청 저장 중...");
+    const p=structuredClone(currentPolicy);
+    p.classResetEpoch=p.classResetEpoch||{};
+    p.classResetEpoch[selectedClass]=Date.now();
+    p.revision=new Date().toISOString();
+    await putPolicy(p,"Reset class registration "+selectedClass);
+    fill(p);
+    setStatus(
+      selectedClass+" 반 초기화 요청 완료.\n"+
+      "해당 반 기기들은 다음 정책 동기화 후 반등록이 해제되고, 앱을 다시 열면 새 반번호 입력창이 나타납니다.",
+      true
+    );
+  }catch(e){
+    setStatus(e.message||String(e),false);
+  }
+}
+
+async function saveShared(){
+  if(!currentPolicy){
+    setStatus("먼저 정책을 불러오세요.",false);
+    return;
+  }
+  try{
+    setStatus("전 반 공통 사이트 정책 저장 중...");
+    const p=structuredClone(currentPolicy);
+    p.autoDetectEnabled=$("autoDetect").checked;
+    p.blockedHosts=parseLines($("blockedHosts").value);
+    p.allowedHosts=parseLines($("allowedHosts").value);
+    p.revision=new Date().toISOString();
+    await putPolicy(p,"Update shared AI blocking sites");
+    fill(p);
+    setStatus("공통 사이트 정책 저장 완료. 모든 반에 동일하게 적용됩니다.",true);
+  }catch(e){
+    setStatus(e.message||String(e),false);
+  }
+}
+
 $("loadBtn").onclick=loadPolicy;
-$("reloadBtn").onclick=loadPolicy;
-$("saveBtn").onclick=savePolicy;
+$("selectClassBtn").onclick=selectClass;
+$("saveClassBtn").onclick=saveClass;
+$("resetClassBtn").onclick=resetClass;
+$("saveSharedBtn").onclick=saveShared;
 $("addHostBtn").onclick=()=>{
   const h=normalizeHost($("newHost").value);
   if(!h)return;
-  const list=parseLines($("blockedHosts").value+"\n"+h);
-  $("blockedHosts").value=list.join("\n");
+  $("blockedHosts").value=parseLines($("blockedHosts").value+"\n"+h).join("\n");
   $("newHost").value="";
 };
+$("randomClassBtn").onclick=()=>{
+  const chars="ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let s="";
+  crypto.getRandomValues(new Uint8Array(6)).forEach(v=>s+=chars[v%chars.length]);
+  $("classCode").value="C-"+s;
+};
+
+const initialClass=new URL(location.href).searchParams.get("class");
+if(initialClass){
+  $("classCode").value=normalizeClass(initialClass);
+  selectedClass=normalizeClass(initialClass);
+}
 loadPolicy();
 </script>
 </body>
