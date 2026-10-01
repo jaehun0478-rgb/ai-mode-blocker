@@ -29,14 +29,18 @@ public class MainActivity extends Activity {
         toggleButton = findViewById(R.id.toggleButton);
         accessibilityButton = findViewById(R.id.accessibilityButton);
         Button changePinButton = findViewById(R.id.changePinButton);
+        TextView managedInfoText = findViewById(R.id.managedInfoText);
 
-        toggleButton.setOnClickListener(v -> onToggleRequested());
+        toggleButton.setOnClickListener(v ->
+                Toast.makeText(this, "차단 설정은 중앙관리 사이트에서 변경합니다.", Toast.LENGTH_SHORT).show());
         accessibilityButton.setOnClickListener(v -> openAccessibilitySettings());
-        changePinButton.setOnClickListener(v -> showVerifyThenChangePin());
+        changePinButton.setOnClickListener(v ->
+                Toast.makeText(this, "교사용 PIN은 중앙관리 사이트에서 변경합니다.", Toast.LENGTH_SHORT).show());
 
-        if (!PinManager.hasPin(this)) {
-            showInitialPinSetup();
-        }
+        toggleButton.setEnabled(false);
+        changePinButton.setEnabled(false);
+        managedInfoText.setVisibility(View.VISIBLE);
+        RemotePolicyManager.maybeSync(this, true);
     }
 
     @Override
@@ -46,7 +50,9 @@ public class MainActivity extends Activity {
     }
 
     private void refreshUi() {
-        boolean enabled = BlockPreferences.isEnabled(this);
+        RemotePolicyManager.maybeSync(this, false);
+        boolean enabled = BlockPreferences.isEnabled(this)
+                && RemotePolicyManager.isRemoteBlockingEnabled(this);
         boolean accessibilityEnabled = AccessibilityUtils.isServiceEnabled(this);
 
         if (enabled && accessibilityEnabled) {
@@ -64,7 +70,7 @@ public class MainActivity extends Activity {
                 ? "접근성 감지 서비스: 켜짐"
                 : "접근성 감지 서비스: 꺼짐 — 한 번 켜야 차단됩니다.");
 
-        toggleButton.setText(enabled ? "차단 끄기" : "차단 켜기");
+        toggleButton.setText("중앙관리 모드");
         accessibilityButton.setVisibility(accessibilityEnabled ? View.GONE : View.VISIBLE);
     }
 
