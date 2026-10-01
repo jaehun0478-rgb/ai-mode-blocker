@@ -15,7 +15,6 @@ import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.Locale;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -30,20 +29,18 @@ final class RemotePolicyManager {
     private static final String KEY_ETAG = "etag";
     private static final String KEY_BLOCKED_HOSTS = "blocked_hosts";
     private static final String KEY_ALLOWED_HOSTS = "allowed_hosts";
-    private static final String KEY_BLOCKING_ENABLED = "blocking_enabled";
     private static final String KEY_AUTO_DETECT = "auto_detect";
     private static final String KEY_POLICY_REVISION = "policy_revision";
+    private static final String KEY_CLASS_STATES = "class_states_json";
 
     private static final long SYNC_INTERVAL_MS = 2 * 60 * 1000L;
     private static final AtomicBoolean syncing = new AtomicBoolean(false);
 
     private RemotePolicyManager() {}
 
-    static boolean isManagedMode() {
-        return true;
-    }
-
     static void maybeSync(Context context, boolean force) {
+        if (!ClassRegistration.hasClassCode(context)) return;
+
         Context app = context.getApplicationContext();
         SharedPreferences p = app.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
         long now = System.currentTimeMillis();
@@ -98,7 +95,7 @@ final class RemotePolicyManager {
             if (newEtag != null) e.putString(KEY_ETAG, newEtag);
             e.apply();
         } catch (Exception ignored) {
-            // Keep the last successfully downloaded policy when offline.
+            // Keep the last successful policy when offline.
         } finally {
             if (connection != null) connection.disconnect();
         }
@@ -108,7 +105,6 @@ final class RemotePolicyManager {
         SharedPreferences p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
         SharedPreferences.Editor e = p.edit();
 
-        e.putBoolean(KEY_BLOCKING_ENABLED, json.optBoolean("blockingEnabled", true));
         e.putBoolean(KEY_AUTO_DETECT, json.optBoolean("autoDetectEnabled", true));
         e.putString(KEY_POLICY_REVISION, json.optString("revision", ""));
 
@@ -122,18 +118,9 @@ final class RemotePolicyManager {
             e.putStringSet(KEY_ALLOWED_HOSTS, jsonArrayToHostSet(allowed));
         }
 
-        JSONObject pin = json.optJSONObject("adminPin");
-        if (pin != null) {
-            String salt = pin.optString("salt", "");
-            String hash = pin.optString("hash", "");
-            int iterations = pin.optInt("iterations", 120000);
-            if (!salt.isEmpty() && !hash.isEmpty()) {
-                PinManager.applyManagedPin(context, salt, hash, iterations);
-            }
-        }
-
+        JSONObject classStates = json.optJSONObject("classBlocking");
+        e.putString(KEY_CLASS_STATES, classStates == null ? "{}" : classStates.toString());
         e.apply();
-        BlockPreferences.setEnabled(context, json.optBoolean("blockingEnabled", true));
     }
 
     static boolean isAutoDetectEnabled(Context context) {
@@ -142,8 +129,18 @@ final class RemotePolicyManager {
     }
 
     static boolean isRemoteBlockingEnabled(Context context) {
-        return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-                .getBoolean(KEY_BLOCKING_ENABLED, true);
+        String classCode = ClassRegistration.getClassCode(context);
+        if (classCode.isEmpty()) return false;
+
+        String raw = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .getString(KEY_CLASS_STATES, "{}");
+        try {
+            JSONObject states = new JSONObject(raw == null ? "{}" : raw);
+            // A newly registered class defaults to ON until the teacher explicitly turns it off.
+            return states.optBoolean(classCode, true);
+        } catch (Exception ignored) {
+            return true;
+        }
     }
 
     static long getLastSuccess(Context context) {
