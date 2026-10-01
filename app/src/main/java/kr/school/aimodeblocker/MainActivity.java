@@ -39,6 +39,7 @@ public class MainActivity extends Activity {
 
         toggleButton.setEnabled(false);
         changePinButton.setEnabled(false);
+        changePinButton.setVisibility(View.GONE);
         managedInfoText.setVisibility(View.VISIBLE);
         RemotePolicyManager.maybeSync(this, true);
     }
