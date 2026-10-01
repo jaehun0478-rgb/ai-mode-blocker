@@ -32,6 +32,7 @@ final class RemotePolicyManager {
     private static final String KEY_AUTO_DETECT = "auto_detect";
     private static final String KEY_POLICY_REVISION = "policy_revision";
     private static final String KEY_CLASS_STATES = "class_states_json";
+    private static final String KEY_CLASS_RESETS = "class_resets_json";
 
     private static final long SYNC_INTERVAL_MS = 2 * 60 * 1000L;
     private static final AtomicBoolean syncing = new AtomicBoolean(false);
@@ -109,18 +110,33 @@ final class RemotePolicyManager {
         e.putString(KEY_POLICY_REVISION, json.optString("revision", ""));
 
         JSONArray blocked = json.optJSONArray("blockedHosts");
-        if (blocked != null) {
-            e.putStringSet(KEY_BLOCKED_HOSTS, jsonArrayToHostSet(blocked));
-        }
+        if (blocked != null) e.putStringSet(KEY_BLOCKED_HOSTS, jsonArrayToHostSet(blocked));
 
         JSONArray allowed = json.optJSONArray("allowedHosts");
-        if (allowed != null) {
-            e.putStringSet(KEY_ALLOWED_HOSTS, jsonArrayToHostSet(allowed));
-        }
+        if (allowed != null) e.putStringSet(KEY_ALLOWED_HOSTS, jsonArrayToHostSet(allowed));
 
         JSONObject classStates = json.optJSONObject("classBlocking");
+        JSONObject classResets = json.optJSONObject("classResetEpoch");
+
         e.putString(KEY_CLASS_STATES, classStates == null ? "{}" : classStates.toString());
+        e.putString(KEY_CLASS_RESETS, classResets == null ? "{}" : classResets.toString());
         e.apply();
+
+        applyClassResetIfNeeded(context, classResets);
+    }
+
+    private static void applyClassResetIfNeeded(Context context, JSONObject classResets) {
+        if (classResets == null) return;
+
+        String classCode = ClassRegistration.getClassCode(context);
+        if (classCode.isEmpty()) return;
+
+        long registeredAt = ClassRegistration.getRegisteredAt(context);
+        long resetAt = classResets.optLong(classCode, 0L);
+
+        if (resetAt > 0L && resetAt > registeredAt) {
+            ClassRegistration.clearForRemoteReset(context);
+        }
     }
 
     static boolean isAutoDetectEnabled(Context context) {
@@ -136,21 +152,10 @@ final class RemotePolicyManager {
                 .getString(KEY_CLASS_STATES, "{}");
         try {
             JSONObject states = new JSONObject(raw == null ? "{}" : raw);
-            // A newly registered class defaults to ON until the teacher explicitly turns it off.
             return states.optBoolean(classCode, true);
         } catch (Exception ignored) {
             return true;
         }
-    }
-
-    static long getLastSuccess(Context context) {
-        return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-                .getLong(KEY_LAST_SUCCESS, 0L);
-    }
-
-    static String getRevision(Context context) {
-        return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-                .getString(KEY_POLICY_REVISION, "");
     }
 
     static boolean isBlockedUrl(Context context, String rawUrl) {
