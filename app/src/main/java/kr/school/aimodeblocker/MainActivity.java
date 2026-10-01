@@ -67,14 +67,14 @@ public class MainActivity extends Activity {
 
         final EditText input = new EditText(this);
         input.setSingleLine(true);
-        input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS);
-        input.setHint("예: 4A-7K9P");
+        input.setInputType(InputType.TYPE_CLASS_NUMBER);
+        input.setHint("예: 4123");
         int pad = (int) (20 * getResources().getDisplayMetrics().density);
         input.setPadding(pad, pad / 2, pad, pad / 2);
 
         String message = wasReset
                 ? "이 기기의 이전 반 등록이 선생님에 의해 초기화되었습니다. 새 학년/반의 고유반번호를 입력하세요."
-                : "선생님이 알려준 고유반번호를 입력하세요. 등록 후 이 기기는 해당 반의 ON/OFF 설정만 적용받습니다.";
+                : "선생님이 알려준 숫자 4~6자리 고유반번호를 입력하세요. 등록 후 이 기기는 해당 반의 ON/OFF 설정만 적용받습니다.";
 
         AlertDialog dialog = new AlertDialog.Builder(this)
                 .setTitle(wasReset ? "새 반번호 등록" : "고유반번호 등록")
@@ -89,7 +89,7 @@ public class MainActivity extends Activity {
                     String code = ClassRegistration.normalize(input.getText().toString());
 
                     if (!ClassRegistration.isValid(code)) {
-                        input.setError("영문·숫자·-·_ 조합 4~32자리로 입력하세요.");
+                        input.setError("숫자 4~6자리로 입력하세요.");
                         return;
                     }
 
