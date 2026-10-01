@@ -29,7 +29,10 @@ final class AiModeUrlMatcher {
             "pi.ai",
             "duck.ai",
             "z.ai",
-            "wrtn.ai"
+            "wrtn.ai",
+            "easemate.ai",
+            "easemate.net",
+            "easymate.ai"
     };
 
     private AiModeUrlMatcher() {}
