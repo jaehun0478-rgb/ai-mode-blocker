@@ -54,6 +54,16 @@
                 android:textStyle="bold" />
 
             <TextView
+                android:id="@+id/classCodeText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="등록된 반번호 확인 중..."
+                android:textColor="#315D9B"
+                android:textSize="14sp"
+                android:textStyle="bold" />
+
+            <TextView
                 android:id="@+id/accessibilityStatusText"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -70,7 +80,7 @@
             android:layout_marginTop="16dp"
             android:background="#EAF3FF"
             android:padding="16dp"
-            android:text="중앙관리 연결됨 · 설치 후 접근성 서비스만 한 번 켜면 됩니다. 차단 설정과 AI 사이트 목록은 교사용 중앙관리에서 자동 동기화됩니다."
+            android:text="반별 중앙관리 · 최초 실행 때 고유반번호를 한 번 등록하고 접근성 서비스만 켜면 됩니다. 사이트 목록은 전 반 공통이고 차단 ON/OFF만 반별로 적용됩니다."
             android:textColor="#1F4E79"
             android:textSize="14sp" />
 
