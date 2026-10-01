@@ -1,6 +1,5 @@
 {
-  "revision": "2026-10-01-v2",
-  "blockingEnabled": true,
+  "revision": "2026-10-01-class-reset-v1",
   "autoDetectEnabled": true,
   "blockedHosts": [
     "chatgpt.com",
@@ -39,5 +38,7 @@
     "wikipedia.org",
     "namu.wiki",
     "youtube.com"
-  ]
+  ],
+  "classBlocking": {},
+  "classResetEpoch": {}
 }
