@@ -17,6 +17,7 @@ import java.util.Locale;
 public class AiModeAccessibilityService extends AccessibilityService {
     private static final String CHROME = "com.android.chrome";
     private static final String GOOGLE_APP = "com.google.android.googlequicksearchbox";
+    private static final String NAVER_APP = "com.nhn.android.search";
     private static final String URL_BAR_ID = "com.android.chrome:id/url_bar";
 
     private static final long CHECK_THROTTLE_MS = 100L;
@@ -33,7 +34,7 @@ public class AiModeAccessibilityService extends AccessibilityService {
         AccessibilityServiceInfo info = getServiceInfo();
         if (info == null) info = new AccessibilityServiceInfo();
 
-        info.packageNames = new String[]{CHROME, GOOGLE_APP};
+        info.packageNames = new String[]{CHROME, GOOGLE_APP, NAVER_APP};
         info.eventTypes =
                 AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED |
                 AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED |
@@ -69,18 +70,39 @@ public class AiModeAccessibilityService extends AccessibilityService {
         }
 
         if (CHROME.equals(pkg)) {
-            handleChrome(root, now);
+            handleChrome(event, root, now);
         } else if (GOOGLE_APP.equals(pkg)) {
             handleGoogleApp(event, root, now);
+        } else if (NAVER_APP.equals(pkg)) {
+            handleNaverApp(event, root, now);
         }
     }
 
-    private void handleChrome(AccessibilityNodeInfo root, long now) {
+    private void handleChrome(AccessibilityEvent event, AccessibilityNodeInfo root, long now) {
         AccessibilityNodeInfo urlBar = findChromeUrlBar(root);
         if (urlBar == null || urlBar.getText() == null) return;
 
         String currentUrl = urlBar.getText().toString();
         if (currentUrl.isEmpty()) return;
+
+        if (isNaverUrl(currentUrl) && event.getEventType() == AccessibilityEvent.TYPE_VIEW_CLICKED) {
+            AccessibilityNodeInfo source = event.getSource();
+            String clicked = combinedNodeLabel(source);
+
+            if (isNaverAiLabel(clicked) || ancestorHasNaverAiLabel(source)) {
+                blockWithBack("naver-web-ai-click", now);
+                return;
+            }
+
+            if (event.getText() != null) {
+                for (CharSequence t : event.getText()) {
+                    if (isNaverAiLabel(t == null ? "" : t.toString())) {
+                        blockWithBack("naver-web-ai-click", now);
+                        return;
+                    }
+                }
+            }
+        }
 
         if (AiModeUrlMatcher.shouldBlock(currentUrl)) {
             blockWithBack("block:" + currentUrl, now);
@@ -172,6 +194,84 @@ public class AiModeAccessibilityService extends AccessibilityService {
             } catch (Exception ignored) {
             }
         }
+    }
+
+
+    private void handleNaverApp(AccessibilityEvent event, AccessibilityNodeInfo root, long now) {
+        // Block direct AI-tab buttons inside the NAVER Android app.
+        if (event.getEventType() == AccessibilityEvent.TYPE_VIEW_CLICKED) {
+            AccessibilityNodeInfo source = event.getSource();
+            String clicked = combinedNodeLabel(source);
+
+            if (isNaverAiLabel(clicked) || ancestorHasNaverAiLabel(source)) {
+                blockWithBack("naver-app-ai-click", now);
+                return;
+            }
+
+            if (event.getText() != null) {
+                for (CharSequence t : event.getText()) {
+                    if (isNaverAiLabel(t == null ? "" : t.toString())) {
+                        blockWithBack("naver-app-ai-click", now);
+                        return;
+                    }
+                }
+            }
+        }
+
+        // Fallback: if an AI conversation screen was opened without a clean
+        // click event, detect characteristic AI-tab text and leave it.
+        String screenText = collectScreenText(root, 900);
+        if (looksLikeNaverAiPage(screenText)) {
+            blockWithBack("naver-app-ai-page", now);
+        }
+    }
+
+    private boolean isNaverUrl(String rawUrl) {
+        if (rawUrl == null) return false;
+        String lower = rawUrl.trim().toLowerCase(Locale.ROOT);
+        return lower.contains("naver.com")
+                || lower.contains("search.naver.com")
+                || lower.contains("m.naver.com");
+    }
+
+    private boolean isNaverAiLabel(String label) {
+        if (label == null) return false;
+        String clean = label.trim().toLowerCase(Locale.ROOT)
+                .replace(" ", "");
+
+        return clean.equals("ai탭")
+                || clean.equals("ai검색")
+                || clean.contains("ai탭에서대화하기")
+                || clean.contains("ai로더알아보기")
+                || clean.startsWith("ai탭,")
+                || clean.startsWith("ai검색,");
+    }
+
+    private boolean ancestorHasNaverAiLabel(AccessibilityNodeInfo node) {
+        AccessibilityNodeInfo current = node;
+        for (int depth = 0; current != null && depth < 6; depth++) {
+            if (isNaverAiLabel(combinedNodeLabel(current))) return true;
+            current = current.getParent();
+        }
+        return false;
+    }
+
+    private boolean looksLikeNaverAiPage(String screenText) {
+        if (screenText == null || screenText.isEmpty()) return false;
+
+        boolean hasAiTab =
+                screenText.contains("ai탭")
+                        || screenText.contains("ai 탭");
+
+        boolean hasConversationSignature =
+                screenText.contains("새 대화")
+                        || screenText.contains("대화 기록")
+                        || screenText.contains("대화 입력")
+                        || screenText.contains("질문을 입력")
+                        || screenText.contains("궁금한 것을 물어보")
+                        || screenText.contains("ai와 대화");
+
+        return hasAiTab && hasConversationSignature;
     }
 
     private boolean isWebTabAlreadySelected(AccessibilityNodeInfo node) {
