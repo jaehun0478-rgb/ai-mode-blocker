@@ -29,7 +29,7 @@ final class ClassRegistration {
 
     static boolean isValid(String raw) {
         String code = normalize(raw);
-        return code.matches("[A-Z0-9_-]{4,32}");
+        return code.matches("\\d{4,6}");
     }
 
     static boolean saveOnce(Context context, String raw) {
@@ -63,8 +63,6 @@ final class ClassRegistration {
 
     static String normalize(String raw) {
         if (raw == null) return "";
-        return raw.trim()
-                .replace(" ", "")
-                .toUpperCase(Locale.ROOT);
+        return raw.trim().replace(" ", "");
     }
 }
