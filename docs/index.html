@@ -68,12 +68,6 @@
   </section>
 
   <section class="card">
-    <label>공통 관리자 PIN 변경</label>
-    <input id="newPin" type="password" inputmode="numeric" placeholder="변경할 때만 숫자 4~12자리 입력">
-    <p class="small">PIN 원문은 저장하지 않고 PBKDF2 해시만 정책 파일에 저장됩니다. 비워두면 현재 PIN을 유지합니다.</p>
-  </section>
-
-  <section class="card">
     <div class="row">
       <button class="primary" id="saveBtn">전체 학생 기기에 정책 저장</button>
       <button class="secondary fit" id="reloadBtn">다시 불러오기</button>
@@ -111,7 +105,6 @@ function fill(policy){
   $("autoDetect").checked=policy.autoDetectEnabled!==false;
   $("blockedHosts").value=(policy.blockedHosts||[]).join("\n");
   $("allowedHosts").value=(policy.allowedHosts||[]).join("\n");
-  $("newPin").value="";
   setStatus("정책 불러옴 · revision: "+(policy.revision||"(없음)"),true);
 }
 async function loadPolicy(){
@@ -148,8 +141,6 @@ async function savePolicy(){
     policy.autoDetectEnabled=$("autoDetect").checked;
     policy.blockedHosts=parseLines($("blockedHosts").value);
     policy.allowedHosts=parseLines($("allowedHosts").value);
-    const pin=$("newPin").value.trim();
-    if(pin) policy.adminPin=await makePin(pin);
     policy.revision=new Date().toISOString();
 
     const headers={
