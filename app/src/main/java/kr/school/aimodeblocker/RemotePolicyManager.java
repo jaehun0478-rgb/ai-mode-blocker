@@ -171,6 +171,14 @@ final class RemotePolicyManager {
         String host = hostFromUrl(rawUrl);
         if (host.isEmpty()) return false;
 
+        String[] builtInSafe = new String[] {
+                "google.com", "naver.com", "daum.net", "kakao.com",
+                "wikipedia.org", "namu.wiki", "youtube.com"
+        };
+        for (String safe : builtInSafe) {
+            if (hostMatches(host, safe)) return true;
+        }
+
         Set<String> hosts = getHostSet(context, KEY_ALLOWED_HOSTS);
         for (String allowed : hosts) {
             if (hostMatches(host, allowed)) return true;
