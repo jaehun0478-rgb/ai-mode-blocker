@@ -55,7 +55,7 @@ public class AiModeAccessibilityService extends AccessibilityService {
     public void onAccessibilityEvent(AccessibilityEvent event) {
         if (event == null) return;
         RemotePolicyManager.maybeSync(this, false);
-        if (!BlockPreferences.isEnabled(this) || !RemotePolicyManager.isRemoteBlockingEnabled(this)) return;
+        if (!RemotePolicyManager.isRemoteBlockingEnabled(this)) return;
 
         long now = System.currentTimeMillis();
         if (now - lastCheckAt < CHECK_THROTTLE_MS) return;
