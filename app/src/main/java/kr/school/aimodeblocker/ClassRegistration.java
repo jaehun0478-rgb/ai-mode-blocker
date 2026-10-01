@@ -3,8 +3,6 @@ package kr.school.aimodeblocker;
 import android.content.Context;
 import android.content.SharedPreferences;
 
-import java.util.Locale;
-
 final class ClassRegistration {
     private static final String PREFS = "class_registration";
     private static final String KEY_CLASS_CODE = "class_code";
