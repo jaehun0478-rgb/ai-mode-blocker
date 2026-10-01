@@ -104,7 +104,7 @@ public class AiModeAccessibilityService extends AccessibilityService {
     }
 
     private void handleGoogleApp(AccessibilityEvent event, AccessibilityNodeInfo root, long now) {
-        // 1) Intercept the AI Mode button/tab when Google exposes a click event.
+        // 1) Block AI Mode button/tab when a click event is exposed.
         if (event.getEventType() == AccessibilityEvent.TYPE_VIEW_CLICKED) {
             AccessibilityNodeInfo source = event.getSource();
             String clicked = combinedNodeLabel(source);
@@ -123,47 +123,105 @@ public class AiModeAccessibilityService extends AccessibilityService {
             }
         }
 
-        // 2) Some Google-app builds don't expose the AI button click reliably.
-        // Detect the loaded AI Mode page itself and immediately leave it.
-        String screenText = collectScreenText(root, 700);
+        String screenText = collectScreenText(root, 900);
+
+        // 2) If AI Mode has already opened, immediately leave the page.
         if (looksLikeAiModePage(screenText)) {
             blockWithBack("google-ai-page", now);
             return;
         }
 
-        // 3) Normal Google-app search: if an AI Overview is present, switch to
-        // the Web filter in the same result screen.
-        if (hasAiOverview(screenText)) {
-            if (isDuplicateAction("google-web-filter", now)) return;
-
-            AccessibilityNodeInfo webTab = findExactTextNode(root, "웹", "Web");
-            if (webTab != null && clickNodeOrParent(webTab)) {
-                rememberAction("google-web-filter", now);
+        // 3) Do not wait for an AI Overview label. On every normal Google-app
+        // search results screen, force the Web filter. Google documents that
+        // the Web filter omits AI Overview-style features.
+        AccessibilityNodeInfo webTab = findExactTextNode(root, "웹", "Web");
+        if (webTab != null) {
+            if (isWebTabAlreadySelected(webTab)) {
                 return;
             }
 
-            // Fallback: recover the visible search query and reopen the same
-            // Google search as Web-only results in the Google app.
-            String query = findLikelyGoogleQuery(root);
-            if (query != null && !query.isEmpty()) {
-                Uri webUri = new Uri.Builder()
-                        .scheme("https")
-                        .authority("www.google.com")
-                        .path("/search")
-                        .appendQueryParameter("q", query)
-                        .appendQueryParameter("udm", "14")
-                        .build();
-
-                try {
-                    Intent intent = new Intent(Intent.ACTION_VIEW, webUri);
-                    intent.setPackage(GOOGLE_APP);
-                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                    startActivity(intent);
-                    rememberAction("google-web-fallback:" + query, now);
-                } catch (Exception ignored) {
-                }
+            if (!isDuplicateAction("google-force-web", now)
+                    && clickNodeOrParent(webTab)) {
+                rememberAction("google-force-web", now);
+                return;
             }
         }
+
+        // 4) Fallback for Google-app builds that do not expose the Web tab to
+        // accessibility. Recover the visible query and open Web-only results
+        // in Chrome, whose URL bar handling is reliable.
+        String query = findEditableGoogleQuery(root);
+        if (query != null && !query.isEmpty()
+                && looksLikeSearchResults(screenText)
+                && !isDuplicateAction("google-web-fallback:" + query, now)) {
+
+            Uri webUri = new Uri.Builder()
+                    .scheme("https")
+                    .authority("www.google.com")
+                    .path("/search")
+                    .appendQueryParameter("q", query)
+                    .appendQueryParameter("udm", "14")
+                    .build();
+
+            try {
+                Intent intent = new Intent(Intent.ACTION_VIEW, webUri);
+                intent.setPackage(CHROME);
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                startActivity(intent);
+                rememberAction("google-web-fallback:" + query, now);
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
+    private boolean isWebTabAlreadySelected(AccessibilityNodeInfo node) {
+        if (node == null) return false;
+        if (node.isSelected() || node.isChecked()) return true;
+
+        String label = combinedNodeLabel(node).toLowerCase(Locale.ROOT);
+        return label.contains("선택됨")
+                || label.contains("selected")
+                || label.contains("현재 탭");
+    }
+
+    private String findEditableGoogleQuery(AccessibilityNodeInfo root) {
+        List<AccessibilityNodeInfo> queue = new ArrayList<>();
+        queue.add(root);
+
+        for (int i = 0; i < queue.size() && i < 900; i++) {
+            AccessibilityNodeInfo node = queue.get(i);
+            if (node == null) continue;
+
+            CharSequence classNameCs = node.getClassName();
+            String className = classNameCs == null ? "" : classNameCs.toString();
+            CharSequence textCs = node.getText();
+
+            if (textCs != null) {
+                String text = textCs.toString().trim();
+                if (!text.isEmpty() && text.length() <= 300
+                        && (node.isEditable() || className.contains("EditText"))) {
+                    return text;
+                }
+            }
+
+            for (int c = 0; c < node.getChildCount(); c++) {
+                AccessibilityNodeInfo child = node.getChild(c);
+                if (child != null) queue.add(child);
+            }
+        }
+        return null;
+    }
+
+    private boolean looksLikeSearchResults(String screenText) {
+        if (screenText == null || screenText.isEmpty()) return false;
+
+        return screenText.contains("전체")
+                || screenText.contains("이미지")
+                || screenText.contains("동영상")
+                || screenText.contains("뉴스")
+                || screenText.contains("쇼핑")
+                || screenText.contains("검색 결과")
+                || screenText.contains("search results");
     }
 
     private void blockWithBack(String key, long now) {
