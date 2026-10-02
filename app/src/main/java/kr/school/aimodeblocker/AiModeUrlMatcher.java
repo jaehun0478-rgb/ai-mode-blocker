@@ -60,6 +60,25 @@ final class AiModeUrlMatcher {
             return true;
         }
 
+        // NAVER AI Tab uses the normal search.naver.com host, so the host
+        // itself must stay usable. Block the AI-tab URL signatures instead.
+        if (hostMatches(host, "naver.com")) {
+            String ssc = lower(uri.getQueryParameter("ssc"));
+            String sm = lower(uri.getQueryParameter("sm"));
+            String aitChatId = uri.getQueryParameter("ait_chat_id");
+            String aitPv = uri.getQueryParameter("ait_pv");
+
+            if ("tab.ait.all".equals(ssc) || ssc.startsWith("tab.ait.")) {
+                return true;
+            }
+            if (aitChatId != null && !aitChatId.trim().isEmpty()) {
+                return true;
+            }
+            if (sm.contains("aitab") && aitPv != null) {
+                return true;
+            }
+        }
+
         if (!isGoogleHost(host)) return false;
 
         if ("/ai".equals(path) || path.startsWith("/aimode")) {
