@@ -3,6 +3,7 @@ package kr.school.aimodeblocker;
 import android.accessibilityservice.AccessibilityService;
 import android.accessibilityservice.AccessibilityServiceInfo;
 import android.content.Intent;
+import android.graphics.Rect;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -212,7 +213,9 @@ public class AiModeAccessibilityService extends AccessibilityService {
             AccessibilityNodeInfo source = event.getSource();
             String clicked = combinedNodeLabel(source);
 
-            if (isNaverAiLabel(clicked) || ancestorHasNaverAiLabel(source)) {
+            if (isNaverAiLabel(clicked)
+                    || ancestorHasNaverAiLabel(source)
+                    || clickOverlapsNaverAiControl(root, source)) {
                 blockWithBack("naver-app-ai-click", now);
                 return;
             }
@@ -277,10 +280,65 @@ public class AiModeAccessibilityService extends AccessibilityService {
                         || screenText.contains("대화 기록")
                         || screenText.contains("대화 입력")
                         || screenText.contains("질문을 입력")
+                        || screenText.contains("메시지를 입력")
                         || screenText.contains("궁금한 것을 물어보")
+                        || screenText.contains("무엇이든 물어보")
+                        || screenText.contains("대화를 시작")
+                        || screenText.contains("답변 생성")
                         || screenText.contains("ai와 대화");
 
         return hasAiTab && hasConversationSignature;
+    }
+
+    private boolean clickOverlapsNaverAiControl(
+            AccessibilityNodeInfo root,
+            AccessibilityNodeInfo source
+    ) {
+        if (root == null || source == null) return false;
+
+        Rect sourceBounds = new Rect();
+        Rect rootBounds = new Rect();
+        source.getBoundsInScreen(sourceBounds);
+        root.getBoundsInScreen(rootBounds);
+
+        if (sourceBounds.isEmpty() || rootBounds.isEmpty()) return false;
+
+        long sourceArea = (long) sourceBounds.width() * sourceBounds.height();
+        long rootArea = (long) rootBounds.width() * rootBounds.height();
+
+        // A huge generic container overlaps almost everything and would cause
+        // false positives. Only use reasonably local click targets.
+        if (rootArea > 0 && sourceArea > rootArea / 2) return false;
+
+        String[] labels = new String[]{
+                "AI탭", "AI 탭", "AI검색", "AI 검색",
+                "AI로 더 알아보기", "AI탭에서 대화하기"
+        };
+
+        for (String label : labels) {
+            List<AccessibilityNodeInfo> nodes = safeFindByText(root, label);
+            for (AccessibilityNodeInfo node : nodes) {
+                if (node == null || !node.isVisibleToUser()) continue;
+
+                AccessibilityNodeInfo clickable = node;
+                for (int depth = 0; clickable != null && depth < 5; depth++) {
+                    Rect target = new Rect();
+                    clickable.getBoundsInScreen(target);
+
+                    if (!target.isEmpty()) {
+                        int margin = Math.max(24, target.height());
+                        target.inset(-margin, -margin);
+                        if (Rect.intersects(sourceBounds, target)) {
+                            return true;
+                        }
+                    }
+
+                    if (clickable.isClickable()) break;
+                    clickable = clickable.getParent();
+                }
+            }
+        }
+        return false;
     }
 
     private boolean isWebTabAlreadySelected(AccessibilityNodeInfo node) {
