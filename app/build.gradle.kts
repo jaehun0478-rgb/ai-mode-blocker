@@ -10,8 +10,8 @@ android {
         applicationId = "kr.school.aimodeblocker"
         minSdk = 26
         targetSdk = 35
-        versionCode = 30
-        versionName = "3.1.0"
+        versionCode = 32
+        versionName = "3.2.0"
     }
 
     buildTypes {
