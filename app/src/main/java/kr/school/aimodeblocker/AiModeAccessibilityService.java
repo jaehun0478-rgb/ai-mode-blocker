@@ -94,14 +94,14 @@ public class AiModeAccessibilityService extends AccessibilityService {
             String clicked = combinedNodeLabel(source);
 
             if (isNaverAiLabel(clicked) || ancestorHasNaverAiLabel(source)) {
-                blockWithBack("naver-web-ai-click", now);
+                blockChromeTabSafely(root, urlBar, "naver-web-ai-click", now);
                 return;
             }
 
             if (event.getText() != null) {
                 for (CharSequence t : event.getText()) {
                     if (isNaverAiLabel(t == null ? "" : t.toString())) {
-                        blockWithBack("naver-web-ai-click", now);
+                        blockChromeTabSafely(root, urlBar, "naver-web-ai-click", now);
                         return;
                     }
                 }
@@ -110,12 +110,12 @@ public class AiModeAccessibilityService extends AccessibilityService {
 
         if (AiModeUrlMatcher.shouldBlock(currentUrl)
                 || RemotePolicyManager.isBlockedUrl(this, currentUrl)) {
-            blockWithBack("block:" + currentUrl, now);
+            blockChromeTabSafely(root, urlBar, "block:" + currentUrl, now);
             return;
         }
 
         if (AiPageDetector.looksLikeGenerativeAi(this, currentUrl, root)) {
-            blockWithBack("auto-ai:" + currentUrl, now);
+            blockChromeTabSafely(root, urlBar, "auto-ai:" + currentUrl, now);
             return;
         }
 
@@ -389,6 +389,136 @@ public class AiModeAccessibilityService extends AccessibilityService {
                 || screenText.contains("쇼핑")
                 || screenText.contains("검색 결과")
                 || screenText.contains("search results");
+    }
+
+    private void blockChromeTabSafely(
+            AccessibilityNodeInfo root,
+            AccessibilityNodeInfo urlBar,
+            String key,
+            long now
+    ) {
+        if (isDuplicateAction(key, now)) return;
+        rememberAction(key, now);
+
+        // Never use GLOBAL_ACTION_BACK for browser blocking. On an empty
+        // history stack Chrome may interpret Back as "close Chrome" or leave
+        // the browser, which can disrupt unrelated tabs.
+        if (tryCloseSelectedChromeTab(root)) {
+            Toast.makeText(this, getString(R.string.blocked_message), Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        // Some Chrome builds don't expose the tab-strip close control through
+        // Accessibility. In that case, neutralize only the current tab.
+        if (navigateCurrentChromeTab(urlBar, "chrome://newtab")) {
+            Toast.makeText(this, getString(R.string.blocked_message), Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        if (navigateCurrentChromeTab(urlBar, "about:blank")) {
+            Toast.makeText(this, getString(R.string.blocked_message), Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        // Last-resort behavior is intentionally non-destructive: keep Chrome
+        // open rather than falling back to a global Back action.
+        Toast.makeText(this, getString(R.string.blocked_message), Toast.LENGTH_SHORT).show();
+    }
+
+    private boolean tryCloseSelectedChromeTab(AccessibilityNodeInfo root) {
+        if (root == null) return false;
+
+        List<AccessibilityNodeInfo> nodes = flattenNodes(root, 1200);
+        String selectedTitle = findSelectedChromeTabTitle(nodes);
+
+        // Prefer a close control tied to the selected tab title.
+        if (!selectedTitle.isEmpty()) {
+            for (AccessibilityNodeInfo node : nodes) {
+                if (node == null || !node.isVisibleToUser()) continue;
+                String label = combinedNodeLabel(node).trim();
+                if (isCloseTabLabel(label)
+                        && label.toLowerCase(Locale.ROOT)
+                                .contains(selectedTitle.toLowerCase(Locale.ROOT))) {
+                    if (clickNodeOrParent(node)) return true;
+                }
+            }
+        }
+
+        // Some Chrome variants expose an explicit "Close current tab" action.
+        for (AccessibilityNodeInfo node : nodes) {
+            if (node == null || !node.isVisibleToUser()) continue;
+            String label = combinedNodeLabel(node).trim().toLowerCase(Locale.ROOT);
+            if ("현재 탭 닫기".equals(label)
+                    || "close current tab".equals(label)
+                    || "탭 닫기".equals(label)
+                    || "close tab".equals(label)) {
+                if (clickNodeOrParent(node)) return true;
+            }
+        }
+
+        return false;
+    }
+
+    private String findSelectedChromeTabTitle(List<AccessibilityNodeInfo> nodes) {
+        for (AccessibilityNodeInfo node : nodes) {
+            if (node == null || !node.isVisibleToUser()) continue;
+
+            String label = combinedNodeLabel(node).trim();
+            String lower = label.toLowerCase(Locale.ROOT);
+
+            boolean selectedLabel =
+                    lower.endsWith(", selected tab")
+                            || lower.contains(", selected pinned tab")
+                            || label.endsWith(", 선택된 탭")
+                            || label.contains(", 선택되고 고정")
+                            || (node.isSelected()
+                                && (lower.contains(" tab") || label.contains("탭")));
+
+            if (!selectedLabel) continue;
+
+            String title = label
+                    .replaceAll("(?i),\\s*selected(?: pinned)? tab.*$", "")
+                    .replaceAll(",\\s*선택된 탭.*$", "")
+                    .replaceAll(",\\s*선택되고 고정.*$", "")
+                    .trim();
+
+            if (!title.isEmpty()) return title;
+        }
+        return "";
+    }
+
+    private boolean isCloseTabLabel(String label) {
+        if (label == null || label.isEmpty()) return false;
+        String lower = label.toLowerCase(Locale.ROOT);
+
+        return (label.endsWith(" 탭 닫기") || "탭 닫기".equals(label))
+                || (lower.startsWith("close ") && lower.endsWith(" tab"))
+                || "close tab".equals(lower)
+                || "close current tab".equals(lower)
+                || "현재 탭 닫기".equals(label);
+    }
+
+    private List<AccessibilityNodeInfo> flattenNodes(
+            AccessibilityNodeInfo root,
+            int maxNodes
+    ) {
+        List<AccessibilityNodeInfo> out = new ArrayList<>();
+        if (root == null) return out;
+
+        List<AccessibilityNodeInfo> queue = new ArrayList<>();
+        queue.add(root);
+
+        for (int i = 0; i < queue.size() && i < maxNodes; i++) {
+            AccessibilityNodeInfo node = queue.get(i);
+            if (node == null) continue;
+            out.add(node);
+
+            for (int c = 0; c < node.getChildCount(); c++) {
+                AccessibilityNodeInfo child = node.getChild(c);
+                if (child != null) queue.add(child);
+            }
+        }
+        return out;
     }
 
     private void blockWithBack(String key, long now) {
