@@ -3,3 +3,8 @@
 local.properties
 **/build/
 *.iml
+
+# Decrypted local signing material
+.signing/
+*.p12
+*.jks
