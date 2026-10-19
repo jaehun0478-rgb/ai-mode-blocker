@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>AI 검색 차단 · 반별 중앙관리</title>
+  <style>
+    :root{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#17202a;background:#f4f6f8}
+    *{box-sizing:border-box}body{margin:0}main{max-width:980px;margin:0 auto;padding:28px 18px 60px}
+    h1{font-size:28px;margin:0 0 8px}.sub,.small{color:#657585}.small{font-size:13px}
+    .card{background:#fff;border:1px solid #e3e8ed;border-radius:14px;padding:20px;margin:14px 0;box-shadow:0 2px 8px rgba(0,0,0,.04)}
+    .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.row>*{flex:1}.fit{flex:0 0 auto}
+    label{display:block;font-weight:700;margin-bottom:7px}input,textarea,button{font:inherit}
+    input[type=text],textarea{width:100%;padding:11px 12px;border:1px solid #ccd5df;border-radius:9px;background:#fff}
+    textarea{min-height:170px;resize:vertical;line-height:1.45}
+    button{border:0;border-radius:9px;padding:11px 16px;font-weight:700;cursor:pointer}
+    button:disabled{opacity:.5;cursor:not-allowed}
+    .primary{background:#1769e0;color:#fff}.secondary{background:#eaf2ff;color:#1756a9}.danger{background:#b42318;color:#fff}
+    .toggle{display:flex;gap:10px;align-items:center}.toggle input{width:24px;height:24px}
+    .status{padding:11px 13px;border-radius:9px;background:#f0f3f5;margin-top:12px;white-space:pre-wrap}
+    .ok{background:#eaf8ef;color:#146c36}.bad{background:#fff0f0;color:#a62121}
+    .classbox{background:#eef5ff;border-radius:12px;padding:16px;margin-top:14px}
+    .badge{display:inline-block;background:#dceaff;color:#24508b;border-radius:99px;padding:5px 10px;font-size:13px;font-weight:700}
+    .metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:14px}
+    .metric{background:#fff;border:1px solid #dbe5f1;border-radius:10px;padding:14px}
+    .metric b{display:block;font-size:24px;margin-top:4px}.metric span{font-size:12px;color:#687785}
+    table{width:100%;border-collapse:collapse;margin-top:14px;font-size:14px}
+    th,td{padding:9px;border-bottom:1px solid #e6ebef;text-align:left}
+    .warn{background:#fff6df;border:1px solid #f2d98a;border-radius:10px;padding:12px;color:#705b16}
+    @media(max-width:650px){.metrics{grid-template-columns:1fr}.row>*{flex-basis:100%}.row .fit{flex-basis:auto}}
+  </style>
+</head>
+<body>
+<main>
+  <h1>AI 검색 차단 · 반별 중앙관리</h1>
+  <p class="sub">토큰 입력 없이 반번호만으로 등록 기기 수, ON/OFF, 일괄 초기화를 관리합니다. 관리자 권한은 이 교사용 브라우저에 자동 저장됩니다.</p>
+
+  <section class="card">
+    <label>고유반번호</label>
+    <div class="row">
+      <input id="classCode" type="text" inputmode="numeric" maxlength="6" placeholder="예: 0404">
+      <button class="primary fit" id="openBtn">이 반 열기</button>
+    </div>
+    <p class="small">처음 이 반을 여는 교사용 브라우저에는 관리자 키가 자동 생성되어 저장됩니다. 학생 기기에는 저장되지 않습니다.</p>
+    <div id="status" class="status">반번호를 입력하세요.</div>
+  </section>
+
+  <section class="card" id="classPanel" hidden>
+    <div><span class="badge" id="selectedClass"></span></div>
+
+    <div class="metrics">
+      <div class="metric"><span>등록 기기</span><b id="registeredCount">0</b></div>
+      <div class="metric"><span>최근 10분 연결</span><b id="activeCount">0</b></div>
+      <div class="metric"><span>접근성 ON</span><b id="accessibilityCount">0</b></div>
+    </div>
+
+    <label class="toggle" style="margin-top:18px">
+      <input id="classEnabled" type="checkbox">
+      이 반 AI 차단 ON
+    </label>
+
+    <div class="row" style="margin-top:14px">
+      <button class="primary" id="saveStateBtn">ON/OFF 저장</button>
+      <button class="secondary fit" id="refreshBtn">새로고침</button>
+      <button class="danger fit" id="resetBtn">이 반 기기 일괄 초기화</button>
+    </div>
+
+    <p class="warn">초기화를 누르면 이 반번호로 등록된 기기들이 다음 정책 동기화 때 반등록을 해제합니다. 이후 앱을 열면 새 반번호를 다시 입력하게 됩니다.</p>
+
+    <table>
+      <thead><tr><th>기기</th><th>마지막 연결</th><th>앱</th><th>접근성</th></tr></thead>
+      <tbody id="deviceRows"></tbody>
+    </table>
+  </section>
+
+  <section class="card" id="sharedPanel" hidden>
+    <h2 style="margin-top:0">전 반 공통 AI 사이트 정책</h2>
+    <label class="toggle"><input id="autoDetect" type="checkbox"> 신규 AI 사이트 자동판별 ON</label>
+
+    <label style="margin-top:18px">새 AI 사이트 추가</label>
+    <div class="row">
+      <input id="newHost" type="text" placeholder="예: example-ai.com">
+      <button class="secondary fit" id="addHostBtn">목록에 추가</button>
+    </div>
+
+    <label style="margin-top:18px">차단 도메인</label>
+    <textarea id="blockedHosts" spellcheck="false"></textarea>
+
+    <label style="margin-top:18px">자동판별 예외 도메인</label>
+    <textarea id="allowedHosts" spellcheck="false"></textarea>
+
+    <button class="primary" id="saveSharedBtn" style="margin-top:14px">공통 사이트 정책 저장</button>
+  </section>
+</main>
+
+<script>
+const BOOTSTRAP_POLICY="https://raw.githubusercontent.com/jaehun0478-rgb/ai-mode-blocker/main/remote-policy.json";
+let apiBase="";
+let classCode="";
+let adminKey="";
+
+const $=id=>document.getElementById(id);
+function status(msg,ok=null){const e=$("status");e.textContent=msg;e.className="status"+(ok===true?" ok":ok===false?" bad":"")}
+function validClass(v){return /^\d{4,6}$/.test(String(v||"").trim())}
+function normalizeHost(v){return String(v||"").trim().toLowerCase().replace(/^https?:\/\//,"").split("/")[0].split("?")[0].split("#")[0].replace(/^www\./,"").replace(/^\.+/,"")}
+function parseLines(v){return [...new Set(String(v||"").split(/\r?\n/).map(normalizeHost).filter(Boolean))].sort()}
+function adminStorageKey(code){return "aiBlockerAdminKey:"+code}
+function randomKey(){const b=new Uint8Array(32);crypto.getRandomValues(b);return [...b].map(x=>x.toString(16).padStart(2,"0")).join("")}
+async function api(path,opts={}){
+  const headers={...(opts.headers||{}),"Content-Type":"application/json"};
+  if(adminKey) headers["X-Admin-Key"]=adminKey;
+  const r=await fetch(apiBase+path,{...opts,headers,cache:"no-store"});
+  let data={};try{data=await r.json()}catch{}
+  if(!r.ok) throw new Error(data.error||("HTTP "+r.status));
+  return data;
+}
+async function loadApiBase(){
+  const r=await fetch(BOOTSTRAP_POLICY+"?t="+Date.now(),{cache:"no-store"});
+  if(!r.ok) throw new Error("중앙 정책을 불러오지 못했습니다.");
+  const p=await r.json();
+  apiBase=String(p.managementApiBase||"").replace(/\/+$/,"");
+  if(!apiBase) throw new Error("중앙 관리 서버가 아직 연결되지 않았습니다.");
+}
+async function ensureAdmin(code){
+  let key=localStorage.getItem(adminStorageKey(code));
+  const isNew=!key;
+  if(!key) key=randomKey();
+  try{
+    await api("/api/admin/bootstrap",{method:"POST",body:JSON.stringify({classCode:code,adminKey:key}),headers:{"X-Admin-Key":""}});
+    localStorage.setItem(adminStorageKey(code),key);
+    return key;
+  }catch(e){
+    if(e.message==="class_already_claimed" && isNew){
+      throw new Error("이 반은 다른 교사용 브라우저에서 이미 관리자 등록되었습니다.");
+    }
+    throw e;
+  }
+}
+function fmtTime(ms){if(!ms)return "-";return new Date(ms).toLocaleString("ko-KR")}
+async function openClass(){
+  const code=$("classCode").value.trim();
+  if(!validClass(code)){status("반번호는 숫자 4~6자리여야 합니다.",false);return}
+  try{
+    status("중앙 서버 연결 중...");
+    await loadApiBase();
+    classCode=code;
+    adminKey=localStorage.getItem(adminStorageKey(code))||"";
+    if(!adminKey) adminKey=await ensureAdmin(code);
+    else{
+      try{await api("/api/admin/class/"+code)}catch(e){
+        if(e.message==="unauthorized"){
+          localStorage.removeItem(adminStorageKey(code));
+          adminKey=await ensureAdmin(code);
+        }else throw e;
+      }
+    }
+    $("classPanel").hidden=false;$("sharedPanel").hidden=false;
+    $("selectedClass").textContent="반번호 "+code;
+    await refreshClass();
+    await refreshShared();
+    status(code+" 반 연결 완료",true);
+  }catch(e){status(e.message||String(e),false)}
+}
+async function refreshClass(){
+  const d=await api("/api/admin/class/"+classCode);
+  $("classEnabled").checked=d.enabled!==false;
+  $("registeredCount").textContent=d.registeredCount||0;
+  $("activeCount").textContent=d.active10mCount||0;
+  $("accessibilityCount").textContent=d.accessibilityOnCount||0;
+  $("deviceRows").innerHTML=(d.devices||[]).map((x,i)=>"<tr><td>"+(i+1)+" · "+String(x.deviceId).slice(0,8)+"</td><td>"+fmtTime(x.lastSeen)+"</td><td>"+(x.appVersion||"-")+"</td><td>"+(x.accessibilityEnabled?"ON":"OFF")+"</td></tr>").join("");
+}
+async function refreshShared(){
+  const p=await api("/api/admin/shared/"+classCode);
+  $("autoDetect").checked=p.autoDetectEnabled!==false;
+  $("blockedHosts").value=(p.blockedHosts||[]).join("\n");
+  $("allowedHosts").value=(p.allowedHosts||[]).join("\n");
+}
+$("openBtn").onclick=openClass;
+$("refreshBtn").onclick=async()=>{try{await refreshClass();status("새로고침 완료",true)}catch(e){status(e.message,false)}};
+$("saveStateBtn").onclick=async()=>{try{await api("/api/admin/class/"+classCode+"/state",{method:"POST",body:JSON.stringify({enabled:$("classEnabled").checked})});await refreshClass();status("이 반 ON/OFF 저장 완료",true)}catch(e){status(e.message,false)}};
+$("resetBtn").onclick=async()=>{if(!confirm(classCode+" 반의 등록 기기를 모두 초기화할까요?"))return;try{await api("/api/admin/class/"+classCode+"/reset",{method:"POST",body:"{}"});await refreshClass();status("초기화 요청 완료. 기기들이 다음 동기화 후 새 반번호 입력 상태로 바뀝니다.",true)}catch(e){status(e.message,false)}};
+$("addHostBtn").onclick=()=>{const h=normalizeHost($("newHost").value);if(!h)return;$("blockedHosts").value=parseLines($("blockedHosts").value+"\n"+h).join("\n");$("newHost").value=""};
+$("saveSharedBtn").onclick=async()=>{try{await api("/api/admin/shared/"+classCode,{method:"POST",body:JSON.stringify({autoDetectEnabled:$("autoDetect").checked,blockedHosts:parseLines($("blockedHosts").value),allowedHosts:parseLines($("allowedHosts").value)})});await refreshShared();status("공통 사이트 정책 저장 완료",true)}catch(e){status(e.message,false)}};
+</script>
+</body>
+</html>
