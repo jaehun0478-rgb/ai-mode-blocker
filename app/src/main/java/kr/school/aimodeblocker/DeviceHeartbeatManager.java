@@ -59,7 +59,7 @@ final class DeviceHeartbeatManager {
             body.put("classCode", classCode);
             body.put("deviceId", getAnonymousDeviceId(context));
             body.put("registeredAt", ClassRegistration.getRegisteredAt(context));
-            body.put("appVersion", BuildConfig.VERSION_NAME);
+            body.put("appVersion", getAppVersion(context));
             body.put("accessibilityEnabled", AccessibilityUtils.isServiceEnabled(context));
 
             byte[] payload = body.toString().getBytes(StandardCharsets.UTF_8);
@@ -84,6 +84,16 @@ final class DeviceHeartbeatManager {
             return false;
         } finally {
             if (connection != null) connection.disconnect();
+        }
+    }
+
+    private static String getAppVersion(Context context) {
+        try {
+            return context.getPackageManager()
+                    .getPackageInfo(context.getPackageName(), 0)
+                    .versionName;
+        } catch (Exception ignored) {
+            return "";
         }
     }
 
