@@ -48,6 +48,7 @@ public class MainActivity extends Activity {
         } else {
             RemotePolicyManager.maybeSync(this, true);
             scheduleRegistrationRecheck();
+            mainHandler.postDelayed(() -> DeviceHeartbeatManager.maybeSend(this, true), 3000L);
         }
     }
 
@@ -102,6 +103,7 @@ public class MainActivity extends Activity {
                     registrationDialogShowing = false;
                     Toast.makeText(this, "반번호 " + code + " 등록 완료", Toast.LENGTH_SHORT).show();
                     RemotePolicyManager.maybeSync(this, true);
+                    mainHandler.postDelayed(() -> DeviceHeartbeatManager.maybeSend(this, true), 3000L);
                     refreshUi();
 
                     if (!AccessibilityUtils.isServiceEnabled(this)) {
@@ -125,6 +127,7 @@ public class MainActivity extends Activity {
             refreshUi();
             showClassRegistration(ClassRegistration.consumeResetNotice(this));
         } else {
+            DeviceHeartbeatManager.maybeSend(this, true);
             refreshUi();
         }
     }
@@ -135,7 +138,10 @@ public class MainActivity extends Activity {
                 ? "등록된 고유반번호 없음"
                 : "고유반번호: " + classCode);
 
-        if (!classCode.isEmpty()) RemotePolicyManager.maybeSync(this, false);
+        if (!classCode.isEmpty()) {
+            RemotePolicyManager.maybeSync(this, false);
+            DeviceHeartbeatManager.maybeSend(this, false);
+        }
 
         boolean enabled = !classCode.isEmpty()
                 && RemotePolicyManager.isRemoteBlockingEnabled(this);
