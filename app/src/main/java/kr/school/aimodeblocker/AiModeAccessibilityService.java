@@ -32,6 +32,7 @@ public class AiModeAccessibilityService extends AccessibilityService {
     protected void onServiceConnected() {
         super.onServiceConnected();
         RemotePolicyManager.maybeSync(this, true);
+        DeviceHeartbeatManager.maybeSend(this, true);
 
         AccessibilityServiceInfo info = getServiceInfo();
         if (info == null) info = new AccessibilityServiceInfo();
@@ -56,6 +57,7 @@ public class AiModeAccessibilityService extends AccessibilityService {
     public void onAccessibilityEvent(AccessibilityEvent event) {
         if (event == null) return;
         RemotePolicyManager.maybeSync(this, false);
+        DeviceHeartbeatManager.maybeSend(this, false);
         if (!RemotePolicyManager.isRemoteBlockingEnabled(this)) return;
 
         long now = System.currentTimeMillis();
