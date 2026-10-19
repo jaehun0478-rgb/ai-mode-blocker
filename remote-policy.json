@@ -1,5 +1,5 @@
 {
-  "revision": "2026-10-15T01:20:11.916Z",
+  "revision": "2026-10-19T00:53:40.068Z",
   "autoDetectEnabled": true,
   "blockedHosts": [
     "chatgpt.com",
@@ -42,5 +42,6 @@
   "classBlocking": {
     "0404": true
   },
-  "classResetEpoch": {}
+  "classResetEpoch": {},
+  "managementApiBase": ""
 }
