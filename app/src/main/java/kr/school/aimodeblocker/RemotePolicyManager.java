@@ -21,7 +21,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 final class RemotePolicyManager {
     private static final String PREFS = "remote_policy";
-    private static final String POLICY_URL =
+    private static final String BOOTSTRAP_POLICY_URL =
             "https://raw.githubusercontent.com/jaehun0478-rgb/ai-mode-blocker/main/remote-policy.json";
 
     private static final String KEY_LAST_ATTEMPT = "last_attempt";
@@ -33,6 +33,9 @@ final class RemotePolicyManager {
     private static final String KEY_POLICY_REVISION = "policy_revision";
     private static final String KEY_CLASS_STATES = "class_states_json";
     private static final String KEY_CLASS_RESETS = "class_resets_json";
+    private static final String KEY_MANAGEMENT_API_BASE = "management_api_base";
+    private static final String KEY_MANAGED_POLICY_RECEIVED = "managed_policy_received";
+    private static final String KEY_MANAGED_CLASS_ENABLED = "managed_class_enabled";
 
     private static final long SYNC_INTERVAL_MS = 2 * 60 * 1000L;
     private static final AtomicBoolean syncing = new AtomicBoolean(false);
@@ -54,18 +57,23 @@ final class RemotePolicyManager {
 
         new Thread(() -> {
             try {
-                syncNow(app);
+                syncBootstrapPolicy(app);
+                syncManagementPolicy(app);
+                app.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                        .edit()
+                        .putLong(KEY_LAST_SUCCESS, System.currentTimeMillis())
+                        .apply();
             } finally {
                 syncing.set(false);
             }
         }, "ai-policy-sync").start();
     }
 
-    private static void syncNow(Context context) {
+    private static void syncBootstrapPolicy(Context context) {
         HttpURLConnection connection = null;
         try {
             SharedPreferences p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
-            URL url = new URL(POLICY_URL + "?ts=" + System.currentTimeMillis());
+            URL url = new URL(BOOTSTRAP_POLICY_URL + "?ts=" + System.currentTimeMillis());
             connection = (HttpURLConnection) url.openConnection();
             connection.setConnectTimeout(6000);
             connection.setReadTimeout(6000);
@@ -78,33 +86,31 @@ final class RemotePolicyManager {
             }
 
             int code = connection.getResponseCode();
-            if (code == HttpURLConnection.HTTP_NOT_MODIFIED) {
-                p.edit().putLong(KEY_LAST_SUCCESS, System.currentTimeMillis()).apply();
-                return;
-            }
+            if (code == HttpURLConnection.HTTP_NOT_MODIFIED) return;
             if (code < 200 || code >= 300) return;
 
             String body = readAll(connection.getInputStream());
             if (body == null || body.trim().isEmpty()) return;
 
             JSONObject json = new JSONObject(body);
-            applyPolicy(context, json);
+            applyBootstrapPolicy(context, json);
 
             String newEtag = connection.getHeaderField("ETag");
-            SharedPreferences.Editor e = p.edit()
-                    .putLong(KEY_LAST_SUCCESS, System.currentTimeMillis());
-            if (newEtag != null) e.putString(KEY_ETAG, newEtag);
-            e.apply();
+            if (newEtag != null) {
+                p.edit().putString(KEY_ETAG, newEtag).apply();
+            }
         } catch (Exception ignored) {
-            // Keep the last successful policy when offline.
         } finally {
             if (connection != null) connection.disconnect();
         }
     }
 
-    private static void applyPolicy(Context context, JSONObject json) {
+    private static void applyBootstrapPolicy(Context context, JSONObject json) {
         SharedPreferences p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
         SharedPreferences.Editor e = p.edit();
+
+        String apiBase = normalizeApiBase(json.optString("managementApiBase", ""));
+        e.putString(KEY_MANAGEMENT_API_BASE, apiBase);
 
         e.putBoolean(KEY_AUTO_DETECT, json.optBoolean("autoDetectEnabled", true));
         e.putString(KEY_POLICY_REVISION, json.optString("revision", ""));
@@ -117,15 +123,74 @@ final class RemotePolicyManager {
 
         JSONObject classStates = json.optJSONObject("classBlocking");
         JSONObject classResets = json.optJSONObject("classResetEpoch");
-
         e.putString(KEY_CLASS_STATES, classStates == null ? "{}" : classStates.toString());
         e.putString(KEY_CLASS_RESETS, classResets == null ? "{}" : classResets.toString());
         e.apply();
 
-        applyClassResetIfNeeded(context, classResets);
+        if (apiBase.isEmpty()) {
+            p.edit().putBoolean(KEY_MANAGED_POLICY_RECEIVED, false).apply();
+        }
+
+        applyFallbackClassResetIfNeeded(context, classResets);
     }
 
-    private static void applyClassResetIfNeeded(Context context, JSONObject classResets) {
+    private static void syncManagementPolicy(Context context) {
+        String apiBase = getManagementApiBase(context);
+        String classCode = ClassRegistration.getClassCode(context);
+        if (apiBase.isEmpty() || classCode.isEmpty()) return;
+
+        HttpURLConnection connection = null;
+        try {
+            URL url = new URL(apiBase + "/api/policy/" + classCode
+                    + "?ts=" + System.currentTimeMillis());
+            connection = (HttpURLConnection) url.openConnection();
+            connection.setConnectTimeout(6000);
+            connection.setReadTimeout(6000);
+            connection.setRequestProperty("Accept", "application/json");
+            connection.setRequestProperty("Cache-Control", "no-cache");
+
+            int code = connection.getResponseCode();
+            if (code < 200 || code >= 300) return;
+
+            String body = readAll(connection.getInputStream());
+            if (body == null || body.trim().isEmpty()) return;
+
+            JSONObject json = new JSONObject(body);
+            applyManagedPolicy(context, json);
+        } catch (Exception ignored) {
+        } finally {
+            if (connection != null) connection.disconnect();
+        }
+    }
+
+    private static void applyManagedPolicy(Context context, JSONObject json) {
+        SharedPreferences p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        SharedPreferences.Editor e = p.edit();
+
+        e.putBoolean(KEY_MANAGED_POLICY_RECEIVED, true);
+        e.putBoolean(KEY_MANAGED_CLASS_ENABLED, json.optBoolean("enabled", true));
+        e.putBoolean(KEY_AUTO_DETECT, json.optBoolean("autoDetectEnabled", true));
+        e.putString(KEY_POLICY_REVISION, json.optString("revision", ""));
+
+        JSONArray blocked = json.optJSONArray("blockedHosts");
+        if (blocked != null) e.putStringSet(KEY_BLOCKED_HOSTS, jsonArrayToHostSet(blocked));
+
+        JSONArray allowed = json.optJSONArray("allowedHosts");
+        if (allowed != null) e.putStringSet(KEY_ALLOWED_HOSTS, jsonArrayToHostSet(allowed));
+
+        e.apply();
+
+        long resetAt = json.optLong("resetEpoch", 0L);
+        long registeredAt = ClassRegistration.getRegisteredAt(context);
+        if (resetAt > 0L && resetAt > registeredAt) {
+            ClassRegistration.clearForRemoteReset(context);
+        }
+    }
+
+    private static void applyFallbackClassResetIfNeeded(
+            Context context,
+            JSONObject classResets
+    ) {
         if (classResets == null) return;
 
         String classCode = ClassRegistration.getClassCode(context);
@@ -139,6 +204,11 @@ final class RemotePolicyManager {
         }
     }
 
+    static String getManagementApiBase(Context context) {
+        return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .getString(KEY_MANAGEMENT_API_BASE, "");
+    }
+
     static boolean isAutoDetectEnabled(Context context) {
         return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
                 .getBoolean(KEY_AUTO_DETECT, true);
@@ -148,8 +218,14 @@ final class RemotePolicyManager {
         String classCode = ClassRegistration.getClassCode(context);
         if (classCode.isEmpty()) return false;
 
-        String raw = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-                .getString(KEY_CLASS_STATES, "{}");
+        SharedPreferences p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+
+        if (!getManagementApiBase(context).isEmpty()
+                && p.getBoolean(KEY_MANAGED_POLICY_RECEIVED, false)) {
+            return p.getBoolean(KEY_MANAGED_CLASS_ENABLED, true);
+        }
+
+        String raw = p.getString(KEY_CLASS_STATES, "{}");
         try {
             JSONObject states = new JSONObject(raw == null ? "{}" : raw);
             return states.optBoolean(classCode, true);
@@ -201,6 +277,14 @@ final class RemotePolicyManager {
             value = normalizeHost(value);
             if (!value.isEmpty()) out.add(value);
         }
+        return out;
+    }
+
+    private static String normalizeApiBase(String value) {
+        if (value == null) return "";
+        String out = value.trim();
+        while (out.endsWith("/")) out = out.substring(0, out.length() - 1);
+        if (!out.startsWith("https://")) return "";
         return out;
     }
 
