@@ -2,7 +2,9 @@ package kr.school.aimodeblocker;
 
 import android.accessibilityservice.AccessibilityService;
 import android.accessibilityservice.AccessibilityServiceInfo;
+import android.accessibilityservice.GestureDescription;
 import android.content.Intent;
+import android.graphics.Path;
 import android.graphics.Rect;
 import android.net.Uri;
 import android.os.Build;
@@ -27,6 +29,7 @@ public class AiModeAccessibilityService extends AccessibilityService {
     private long lastCheckAt = 0L;
     private long lastActionAt = 0L;
     private String lastActionKey = "";
+    private long lastBriefingSkipAt = 0L;
 
     @Override
     protected void onServiceConnected() {
@@ -90,6 +93,10 @@ public class AiModeAccessibilityService extends AccessibilityService {
 
         String currentUrl = urlBar.getText().toString();
         if (currentUrl.isEmpty()) return;
+
+        if (isNaverUrl(currentUrl) && skipNaverAiBriefing(root, now)) {
+            return;
+        }
 
         if (isNaverUrl(currentUrl) && event.getEventType() == AccessibilityEvent.TYPE_VIEW_CLICKED) {
             AccessibilityNodeInfo source = event.getSource();
@@ -210,6 +217,10 @@ public class AiModeAccessibilityService extends AccessibilityService {
 
 
     private void handleNaverApp(AccessibilityEvent event, AccessibilityNodeInfo root, long now) {
+        if (skipNaverAiBriefing(root, now)) {
+            return;
+        }
+
         // Block direct AI-tab buttons inside the NAVER Android app.
         if (event.getEventType() == AccessibilityEvent.TYPE_VIEW_CLICKED) {
             AccessibilityNodeInfo source = event.getSource();
@@ -238,6 +249,105 @@ public class AiModeAccessibilityService extends AccessibilityService {
         if (looksLikeNaverAiPage(screenText)) {
             blockWithBack("naver-app-ai-page", now);
         }
+    }
+
+    private boolean skipNaverAiBriefing(
+            AccessibilityNodeInfo root,
+            long now
+    ) {
+        if (root == null) return false;
+        if (now - lastBriefingSkipAt < 350L) return false;
+
+        AccessibilityNodeInfo briefing = findExactAiBriefingHeading(root);
+        if (briefing == null) return false;
+
+        // Prefer scrolling the actual page/container that owns the AI briefing.
+        AccessibilityNodeInfo current = briefing;
+        for (int depth = 0; current != null && depth < 12; depth++) {
+            if (current.isScrollable()
+                    && current.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD)) {
+                lastBriefingSkipAt = now;
+                return true;
+            }
+            current = current.getParent();
+        }
+
+        // Some WebView builds don't mark the page node as scrollable.
+        // Find any visible scrollable container in the active window.
+        List<AccessibilityNodeInfo> nodes = flattenNodes(root, 1400);
+        for (AccessibilityNodeInfo node : nodes) {
+            if (node == null || !node.isVisibleToUser() || !node.isScrollable()) continue;
+            if (node.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD)) {
+                lastBriefingSkipAt = now;
+                return true;
+            }
+        }
+
+        // Final fallback: swipe upward inside the current app only.
+        Rect bounds = new Rect();
+        root.getBoundsInScreen(bounds);
+        if (!bounds.isEmpty() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            float x = bounds.centerX();
+            float startY = bounds.top + bounds.height() * 0.78f;
+            float endY = bounds.top + bounds.height() * 0.22f;
+
+            Path path = new Path();
+            path.moveTo(x, startY);
+            path.lineTo(x, endY);
+
+            GestureDescription gesture = new GestureDescription.Builder()
+                    .addStroke(new GestureDescription.StrokeDescription(
+                            path,
+                            0L,
+                            260L
+                    ))
+                    .build();
+
+            if (dispatchGesture(gesture, null, null)) {
+                lastBriefingSkipAt = now;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private AccessibilityNodeInfo findExactAiBriefingHeading(
+            AccessibilityNodeInfo root
+    ) {
+        List<AccessibilityNodeInfo> nodes = flattenNodes(root, 1400);
+
+        for (AccessibilityNodeInfo node : nodes) {
+            if (node == null || !node.isVisibleToUser() || node.isEditable()) continue;
+
+            String text = node.getText() == null
+                    ? ""
+                    : node.getText().toString().trim();
+            String desc = node.getContentDescription() == null
+                    ? ""
+                    : node.getContentDescription().toString().trim();
+
+            if (isAiBriefingHeading(text) || isAiBriefingHeading(desc)) {
+                return node;
+            }
+        }
+        return null;
+    }
+
+    private boolean isAiBriefingHeading(String value) {
+        if (value == null) return false;
+
+        String normalized = value
+                .replace(" ", "")
+                .replace("\\n", "")
+                .trim()
+                .toLowerCase(Locale.ROOT);
+
+        // Keep this intentionally strict so that an ordinary search result
+        // mentioning "AI 브리핑" does not make the page auto-scroll.
+        return "ai브리핑".equals(normalized)
+                || "ai브리핑beta".equals(normalized)
+                || "ai브리핑β".equals(normalized);
     }
 
     private boolean isNaverUrl(String rawUrl) {
